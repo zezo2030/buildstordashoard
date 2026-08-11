@@ -1,0 +1,52 @@
+@import '@fontsource/tajawal/400.css';
+@import '@fontsource/tajawal/500.css';
+@import '@fontsource/tajawal/700.css';
+@import 'tailwindcss';
+
+/* توكِنز التصميم — منقولة من mobile/src/theme/tokens.ts (مصدرها Figma) */
+@theme {
+  --color-primary: #16283f;
+  --color-navy: #0a2540;
+  --color-accent: #f5851f;
+  --color-accent-soft: #fef3e7;
+  --color-surface: #f5f6f7;
+  --color-subtext: #828a89;
+  --color-line: #e5e7eb;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-chart-1: #7c4dff;
+  --color-chart-2: #f5851f;
+  --color-chart-3: #2f80ed;
+  --color-chart-4: #16a34a;
+  --color-chart-5: #f2c94c;
+  --color-chart-6: #16283f;
+  --font-sans: 'Tajawal', system-ui, sans-serif;
+  --radius-card: 14px;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
+/* أرقام لاتينية بعرض ثابت (مطابق للتصميم) */
+* {
+  font-variant-numeric: tabular-nums;
+}
+
+/* إخفاء شريط التمرير في السايدبار مع الإبقاء على التمرير */
+.sidebar-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
