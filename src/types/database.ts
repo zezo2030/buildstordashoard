@@ -3501,7 +3501,7 @@ export type Database = {
       confirm_payment: { Args: { p_payment_id: string }; Returns: undefined }
       convert_level_for_branches: {
         Args: {
-          p_level_category_id: string
+          p_level_category_id: string | null
           p_mode: string
           p_new_branch_code?: string
           p_new_branch_name_ar?: string

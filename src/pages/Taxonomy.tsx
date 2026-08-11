@@ -816,8 +816,8 @@ function ConvertLevelModal({
         p_specialty_id: specialtyId,
         p_level_category_id: levelCategoryId,
         p_mode: mode,
-        p_new_branch_name_ar: mode === 'move' ? branchName : null,
-        p_new_branch_code: mode === 'move' ? branchCode || null : null,
+        p_new_branch_name_ar: mode === 'move' ? branchName : undefined,
+        p_new_branch_code: mode === 'move' ? branchCode || undefined : undefined,
       });
       if (error) throw new Error(arError(error));
       if (mode === 'move' && data) {
