@@ -84,15 +84,18 @@ export async function rejectSeller(profileId: string, note?: string) {
   if (error) throw new Error(arError(error));
 }
 
+/**
+ * الـ RPC هو الطريق الوحيد — مافيش fallback. الكتابة المباشرة القديمة كانت بتحطّ
+ * status = 'suspended' من غير suspended_at، والصف ده إعادة التفعيل مابتشوفهوش
+ * أصلاً، يعني حالة مالهاش طريق خروج من الكونسول. admin_set_account_status مطبّقة
+ * ومتاحة من ميجريشن الحسابات.
+ */
 export async function setAccountStatus(profileId: string, status: 'active' | 'suspended') {
   try {
     await rpc('admin_set_account_status', { p_profile_id: profileId, p_status: status });
-    return;
   } catch (e) {
-    if (!isMissingFn(e)) throw new Error(arError(e));
+    throw new Error(arError(e));
   }
-  const { error } = await supabase.from('profiles').update({ status }).eq('id', profileId);
-  if (error) throw new Error(arError(error));
 }
 
 /**

@@ -39,7 +39,7 @@ export default function NotificationsPage() {
 
   return (
     <div>
-      <PageHeader title="الإشعارات" subtitle="إرسال إشعار جماعي داخل التطبيق (مع دفع Push عبر send-push)" />
+      <PageHeader title="الإشعارات" subtitle="ابعت إشعار جماعي يظهر داخل التطبيق للمستخدمين اللي تختارهم" />
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <h2 className="mb-4 font-bold">إشعار جديد</h2>

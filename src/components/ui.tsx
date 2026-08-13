@@ -52,12 +52,13 @@ export function Money({ value, signed = false }: { value: number | string | null
   );
 }
 
-export function KpiCard({ title, value, hint, icon, tone = 'navy' }: {
+export function KpiCard({ title, value, hint, icon, tone = 'navy', footer }: {
   title: string;
   value: ReactNode;
   hint?: string;
   icon?: ReactNode;
   tone?: Tone;
+  footer?: ReactNode;
 }) {
   return (
     <Card className="p-4 shadow-[0_1px_0_rgba(22,40,63,0.03)] transition-shadow hover:shadow-[0_10px_28px_-22px_rgba(22,40,63,0.45)]">
@@ -69,6 +70,7 @@ export function KpiCard({ title, value, hint, icon, tone = 'navy' }: {
         </div>
         {icon && <div className={`shrink-0 rounded-xl p-2.5 ${toneClasses[tone]}`}>{icon}</div>}
       </div>
+      {footer && <div className="mt-3 border-t border-line pt-2.5">{footer}</div>}
     </Card>
   );
 }

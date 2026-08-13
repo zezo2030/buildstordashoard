@@ -1,6 +1,8 @@
 // جدول عام: أعمدة معرّفة + ترقيم صفحات range() + حالات تحميل/خطأ/فراغ موحّدة.
+// الفرز اختياري: العمود اللي ليه sortKey بيبقى عنوانه زرار، والفرز نفسه بيتم
+// في الداتابيز — الجدول بيبلّغ بالمفتاح بس.
 import type { ReactNode } from 'react';
-import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { Card, Spinner, EmptyState, ErrorState } from './ui';
 
 export type Column<T> = {
@@ -8,11 +10,15 @@ export type Column<T> = {
   header: string;
   render: (row: T) => ReactNode;
   className?: string;
+  sortKey?: string;
 };
 
 export const PAGE_SIZE = 25;
 
-export function DataTable<T>({ columns, rows, loading, error, onRetry, page, hasMore, onPage, onRowClick, emptyTitle }: {
+export function DataTable<T>({
+  columns, rows, loading, error, onRetry, page, hasMore, onPage, onRowClick, emptyTitle,
+  sort, dir, onSort,
+}: {
   columns: Column<T>[];
   rows: T[];
   loading?: boolean;
@@ -23,6 +29,9 @@ export function DataTable<T>({ columns, rows, loading, error, onRetry, page, has
   onPage?: (p: number) => void;
   onRowClick?: (row: T) => void;
   emptyTitle?: string;
+  sort?: string;
+  dir?: 'asc' | 'desc';
+  onSort?: (key: string) => void;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -37,11 +46,35 @@ export function DataTable<T>({ columns, rows, loading, error, onRetry, page, has
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary text-white">
-                {columns.map((c) => (
-                  <th key={c.key} className={`px-4 py-3 text-start font-medium whitespace-nowrap ${c.className ?? ''}`}>
-                    {c.header}
-                  </th>
-                ))}
+                {columns.map((c) => {
+                  const sortable = !!c.sortKey && !!onSort;
+                  const active = sortable && sort === c.sortKey;
+                  const ariaSort = active && dir ? (dir === 'asc' ? 'ascending' : 'descending') : undefined;
+                  return (
+                    <th
+                      key={c.key}
+                      aria-sort={ariaSort}
+                      className={`px-4 py-3 text-start font-medium whitespace-nowrap ${c.className ?? ''}`}
+                    >
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => onSort(c.sortKey as string)}
+                          className="inline-flex items-center gap-1 rounded transition-opacity hover:opacity-80"
+                        >
+                          <span>{c.header}</span>
+                          {active ? (
+                            dir === 'asc' ? <ChevronUp size={13} /> : <ChevronDown size={13} />
+                          ) : (
+                            <ChevronsUpDown size={13} className="opacity-40" />
+                          )}
+                        </button>
+                      ) : (
+                        c.header
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>

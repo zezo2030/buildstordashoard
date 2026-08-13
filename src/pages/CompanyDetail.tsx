@@ -4,6 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Package } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
+import { setCommission as setCompanyCommission } from '../api/accounts';
 import { PageHeader, Card, StatusChip, Money, Btn, Field, Input, Spinner, ErrorState } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { fmtDate, fmtDateTime } from '../lib/format';
@@ -52,18 +53,25 @@ export default function CompanyDetail() {
     },
   });
 
+  // العمولة بتتكتب عبر admin_set_company_commission بس: بيتحقق من المدى 0..100
+  // وبيسجّل صف قبل/بعد في audit_log. الكتابة المباشرة على الجدول كانت بتعدّي
+  // 0% و500% من غير أثر (مافيش CHECK على العمود).
   const saveCommission = useMutation({
-    mutationFn: async (value: number) => {
-      const { error } = await supabase.from('companies').update({ commission_rate: value }).eq('id', id!);
-      if (error) throw new Error(arError(error));
-    },
+    mutationFn: (value: number) => setCompanyCommission(id!, value),
     onSuccess: () => {
       toast('success', 'تم تحديث نسبة العمولة');
       setCommission(null);
       qc.invalidateQueries({ queryKey: ['company', id] });
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['accounts-stats'] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
+
+  // Number('') بيرجع 0، وtype="number" بيرجع '' لأي إدخال مش رقمي — من غير الشرط
+  // ده حقل فاضي + حفظ = عمولة 0% فعلية من غير ما حد يقصدها. نفس حارس CommissionCell.
+  const commissionInvalid = commission !== null
+    && (commission.trim() === '' || !Number.isFinite(Number(commission)));
 
   if (isLoading) return <Spinner />;
   if (error || !data?.company)
@@ -83,8 +91,12 @@ export default function CompanyDetail() {
         title={c.name_ar}
         subtitle={`${c.type === 'seller' ? 'شركة بائع' : 'شركة مشتري'} · أُنشئت ${fmtDate(c.created_at)}`}
         actions={
-          <Link to="/companies" className="flex items-center gap-1 text-sm text-subtext hover:text-primary">
-            <ArrowRight size={15} /> رجوع للشركات
+          // شركة المشتري مالهاش مكان في تاب البائعين — الرجوع لازم يروح لتابها هي.
+          <Link
+            to={c.type === 'seller' ? '/accounts/sellers' : '/accounts/companies'}
+            className="flex items-center gap-1 text-sm text-subtext hover:text-primary"
+          >
+            <ArrowRight size={15} /> {c.type === 'seller' ? 'رجوع للبائعين' : 'رجوع لمشتري شركة'}
           </Link>
         }
       />
@@ -122,7 +134,7 @@ export default function CompanyDetail() {
                   <Field label="نسبة العمولة %">
                     <Input dir="ltr" type="number" step="0.01" min="0" max="100" value={commission} onChange={(e) => setCommission(e.target.value)} className="w-32" />
                   </Field>
-                  <Btn variant="accent" busy={saveCommission.isPending} onClick={() => saveCommission.mutate(Number(commission))}>حفظ</Btn>
+                  <Btn variant="accent" busy={saveCommission.isPending} disabled={commissionInvalid} onClick={() => saveCommission.mutate(Number(commission))}>حفظ</Btn>
                   <Btn variant="ghost" onClick={() => setCommission(null)}>إلغاء</Btn>
                 </div>
               )}

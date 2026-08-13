@@ -8,6 +8,18 @@ export function money(v: number | string | null | undefined): string {
   return `${kwd.format(n)} د.ك`;
 }
 
+/**
+ * الكميات numeric(14,3) بترجع نص زي "50.000" — بنشيل الأصفار الزايدة بمعالجة
+ * نصية مش رقمية عشان مانفقدش دقة العشري (نفس نتيجة qtyText في التطبيق).
+ */
+export function qty(v: number | string | null | undefined): string {
+  if (v === null || v === undefined || v === '') return '0';
+  const s = String(v);
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return s;
+  if (!s.includes('.')) return s;
+  return s.replace(/0+$/, '').replace(/\.$/, '');
+}
+
 const dateFmt = new Intl.DateTimeFormat('ar', { dateStyle: 'medium', numberingSystem: 'latn' });
 const dateTimeFmt = new Intl.DateTimeFormat('ar', {
   dateStyle: 'medium',
@@ -29,4 +41,10 @@ export function fmtDateTime(v: string | null | undefined): string {
 export function fmtDayShort(v: string): string {
   const d = new Date(v);
   return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+/** شهر قصير للرسم البياني (مثل 8/2026) */
+export function fmtMonthShort(v: string): string {
+  const d = new Date(v);
+  return `${d.getMonth() + 1}/${d.getFullYear()}`;
 }

@@ -1,116 +1,111 @@
-// الطلبات — كل طلبات المنصة مع فلترة الحالة/الدفع وبحث برقم الطلب.
-import { useState } from 'react';
+// الطلبات — فلترة وبحث وفرز من الداتابيز، وعمود موقع التسليم مع رقم المستلم.
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { supabase, arError } from '../lib/supabase';
-import { PageHeader, StatusChip, Select, Input, Money } from '../components/ui';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { fetchOrders, type OrderRow, type OrderSortKey } from '../api/orders';
+import { PageHeader, StatusChip, Select, Input, Money, Card } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
+import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
+import { LocationCell } from '../components/LocationCell';
 import { fmtDateTime } from '../lib/format';
-import { orderStatusLabels, paymentStatusLabels, paymentMethodLabels, labelOf } from '../lib/labels';
+import { orderStatusLabels, paymentMethodLabels, labelOf } from '../lib/labels';
 
-type Row = {
-  id: string;
-  order_number: string;
-  status: string;
-  payment_status: string;
-  payment_method: string;
-  grand_total: number;
-  placed_at: string;
-  buyer: { full_name: string } | null;
-  seller: { name_ar: string } | null;
-};
+// «مسترجع» اتشالت من القايمة لأن مكانها تبويب المرتجعات — الطلب المسترجع نفسه
+// لسه بيبان تحت «كل الحالات».
+const STATUS_OPTIONS = Object.entries(orderStatusLabels).filter(([k]) => k !== 'refunded');
+
+// المحفظة وApple Pay والآجل موجودين في الداتا لكن مش خيارات فلتر — بيبانوا
+// تحت «كل الطرق» وعمود الدفع بيوضّح طريقتهم.
+const METHOD_OPTIONS: [string, string][] = [
+  ['cash_on_delivery', 'كاش عند التوصيل'],
+  ['knet', 'كي نت'],
+  ['credit_card', 'بطاقة ائتمان'],
+];
 
 export default function Orders() {
   const navigate = useNavigate();
-  const [page, setPage] = useState(0);
-  const [status, setStatus] = useState('all');
-  const [payment, setPayment] = useState('all');
+  const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState('all');
+  const [method, setMethod] = useState('all');
+  const [sort, setSort] = useState<OrderSortKey>('placed_at');
+  const [dir, setDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(0);
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['orders', status, payment, search, page],
-    queryFn: async () => {
-      let q = supabase
-        .from('orders')
-        .select(
-          `id, order_number, status, payment_status, payment_method, grand_total, placed_at,
-           buyer:profiles!orders_buyer_id_fkey (full_name),
-           seller:companies!orders_seller_company_id_fkey (name_ar)`,
-        )
-        .order('placed_at', { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-      if (status !== 'all') q = q.eq('status', status as never);
-      if (payment !== 'all') q = q.eq('payment_status', payment as never);
-      if (search.trim()) q = q.ilike('order_number', `%${search.trim()}%`);
-      const { data, error } = await q;
-      if (error) throw new Error(arError(error));
-      return data as unknown as Row[];
-    },
+  // بنأجّل مصطلح البحث 300ms عن آخر ضغطة عشان مانبعتش RPC لكل حرف.
+  useEffect(() => {
+    if (search === debouncedSearch) return;
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0); }, 300);
+    return () => clearTimeout(t);
+  }, [search, debouncedSearch]);
+
+  const list = useQuery({
+    queryKey: ['orders', range.from, range.to, debouncedSearch, status, method, sort, dir, page],
+    queryFn: () => fetchOrders({
+      from: range.from, to: range.to, search: debouncedSearch, status, method,
+      sort, dir, page, pageSize: PAGE_SIZE,
+    }),
+    placeholderData: keepPreviousData,
   });
 
-  const rows = (data ?? []).slice(0, PAGE_SIZE);
+  function toggleSort(key: string) {
+    if (key === sort) setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSort(key as OrderSortKey); setDir('desc'); }
+    setPage(0);
+  }
 
-  const columns: Column<Row>[] = [
-    { key: 'number', header: 'رقم الطلب', render: (r) => <span className="font-medium" dir="ltr">{r.order_number}</span> },
-    { key: 'buyer', header: 'المشتري', render: (r) => r.buyer?.full_name ?? '—' },
-    { key: 'seller', header: 'البائع', render: (r) => r.seller?.name_ar ?? '—' },
-    {
-      key: 'status',
-      header: 'حالة الطلب',
-      render: (r) => {
-        const l = labelOf(orderStatusLabels, r.status);
-        return <StatusChip label={l.label} tone={l.tone} />;
-      },
-    },
-    {
-      key: 'payment',
-      header: 'الدفع',
-      render: (r) => {
-        const ps = labelOf(paymentStatusLabels, r.payment_status);
-        const pm = labelOf(paymentMethodLabels, r.payment_method);
-        return (
-          <div className="flex flex-col gap-1">
-            <StatusChip label={ps.label} tone={ps.tone} />
-            <span className="text-xs text-subtext">{pm.label}</span>
-          </div>
-        );
-      },
-    },
-    { key: 'total', header: 'الإجمالي', render: (r) => <Money value={r.grand_total} /> },
-    { key: 'placed', header: 'التاريخ', render: (r) => <span className="text-xs">{fmtDateTime(r.placed_at)}</span> },
+  const columns: Column<OrderRow>[] = [
+    { key: 'number', header: 'رقم الطلب', sortKey: 'order_number',
+      render: (r) => <span className="font-medium" dir="ltr">{r.orderNumber}</span> },
+    { key: 'buyer', header: 'المشتري', sortKey: 'buyer_name', render: (r) => r.buyerName ?? '—' },
+    { key: 'seller', header: 'البائع', sortKey: 'seller_name', render: (r) => r.sellerName ?? '—' },
+    { key: 'location', header: 'الموقع', render: (r) => <LocationCell loc={r.location} /> },
+    { key: 'status', header: 'حالة الطلب', sortKey: 'status',
+      render: (r) => { const l = labelOf(orderStatusLabels, r.status); return <StatusChip label={l.label} tone={l.tone} />; } },
+    // طريقة الدفع بس — حالة الدفع (مدفوع/معلق/مسترد) مكانها صفحة تفاصيل الطلب،
+    // عشان عمود الدفع في القايمة يجاوب على سؤال واحد: اتدفع بإيه.
+    { key: 'payment', header: 'الدفع',
+      render: (r) => labelOf(paymentMethodLabels, r.paymentMethod).label },
+    { key: 'total', header: 'الإجمالي', sortKey: 'grand_total', render: (r) => <Money value={r.grandTotal} /> },
+    { key: 'placed', header: 'التاريخ', sortKey: 'placed_at',
+      render: (r) => <span className="text-xs">{fmtDateTime(r.placedAt)}</span> },
   ];
 
   return (
     <div>
-      <PageHeader
-        title="الطلبات"
-        actions={
-          <>
-            <Input placeholder="رقم الطلب…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="w-44" dir="ltr" />
-            <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-40">
-              <option value="all">كل الحالات</option>
-              {Object.entries(orderStatusLabels).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </Select>
-            <Select value={payment} onChange={(e) => { setPayment(e.target.value); setPage(0); }} className="w-40">
-              <option value="all">كل حالات الدفع</option>
-              {Object.entries(paymentStatusLabels).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </Select>
-          </>
-        }
-      />
+      <PageHeader title="الطلبات" subtitle="كل طلبات المنصة — بحث برقم الطلب أو اسم المشتري أو البائع" />
+
+      <Card className="mb-4 flex flex-wrap items-center gap-2 p-3">
+        <Input
+          placeholder="رقم الطلب / المشتري / البائع…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-64"
+        />
+        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-40">
+          <option value="all">كل الحالات</option>
+          {STATUS_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </Select>
+        <Select value={method} onChange={(e) => { setMethod(e.target.value); setPage(0); }} className="w-40">
+          <option value="all">كل الطرق</option>
+          {METHOD_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </Select>
+        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} />
+      </Card>
+
       <DataTable
         columns={columns}
-        rows={rows}
-        loading={isLoading}
-        error={error ? (error as Error).message : null}
-        onRetry={() => refetch()}
+        rows={list.data?.rows ?? []}
+        loading={list.isLoading}
+        error={list.error ? (list.error as Error).message : null}
+        onRetry={() => list.refetch()}
         page={page}
-        hasMore={(data?.length ?? 0) > PAGE_SIZE}
+        hasMore={(page + 1) * PAGE_SIZE < (list.data?.total ?? 0)}
         onPage={setPage}
+        sort={sort}
+        dir={dir}
+        onSort={toggleSort}
         onRowClick={(r) => navigate(`/orders/${r.id}`)}
         emptyTitle="لا توجد طلبات"
       />

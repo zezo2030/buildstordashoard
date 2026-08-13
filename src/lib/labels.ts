@@ -60,13 +60,17 @@ export const returnStatusLabels: LabelMap = {
   cancelled: { label: 'ملغي', tone: 'gray' },
 };
 
-export const quotationStatusLabels: LabelMap = {
-  draft: { label: 'مسودة', tone: 'gray' },
-  issued: { label: 'صادرة', tone: 'blue' },
-  offers_received: { label: 'وصلت عروض', tone: 'orange' },
-  awarded: { label: 'تمت الترسية', tone: 'green' },
-  expired: { label: 'منتهية', tone: 'gray' },
-  cancelled: { label: 'ملغاة', tone: 'red' },
+export const refundMethodLabels: LabelMap = {
+  wallet: { label: 'رصيد المحفظة', tone: 'green' },
+  original_payment: { label: 'نفس وسيلة الدفع', tone: 'blue' },
+  bank_transfer: { label: 'تحويل بنكي', tone: 'navy' },
+};
+
+/** مستندات المرتجع في bucket return-docs — مسارها <return_id>/<file> */
+export const returnDocLabels: LabelMap = {
+  return_note: { label: 'سند إرجاع', tone: 'navy' },
+  rejection_note: { label: 'إشعار رفض', tone: 'red' },
+  credit_note: { label: 'إشعار دائن', tone: 'orange' },
 };
 
 export const withdrawalStatusLabels: LabelMap = {
@@ -111,3 +115,39 @@ export function labelOf(map: LabelMap, key: string | null | undefined) {
   if (!key) return { label: '—', tone: 'gray' as Tone };
   return map[key] ?? { label: key, tone: 'gray' as Tone };
 }
+
+/** إعدادات المنصة المعروفة — الاسم والشرح يظهران في صفحة الإعدادات بدل المفتاح الإنجليزي. */
+export const appSettingMeta: Record<string, { label: string; hint: string; kind: 'number' | 'text' | 'phone' }> = {
+  return_window_days: { label: 'مدة الإرجاع (أيام)', hint: 'كم يوم يقدر المشتري يطلب إرجاع بعد التوصيل', kind: 'number' },
+  default_commission_rate: { label: 'نسبة العمولة الافتراضية %', hint: 'عمولة المنصة على البائع الجديد إذا ما تحددت نسبة خاصة', kind: 'number' },
+  min_withdrawal_amount: { label: 'أقل مبلغ سحب (د.ك)', hint: 'الحد الأدنى لطلب سحب من المحفظة', kind: 'number' },
+  quotation_validity_days: { label: 'صلاحية عرض السعر (أيام)', hint: 'كم يوم يفضل عرض السعر ساري قبل ما ينتهي', kind: 'number' },
+  wallet_topup_min: { label: 'أقل شحن محفظة (د.ك)', hint: 'أقل مبلغ يقدر المستخدم يشحن به محفظته', kind: 'number' },
+  wallet_topup_max: { label: 'أعلى شحن محفظة (د.ك)', hint: 'أعلى مبلغ شحن في العملية الواحدة', kind: 'number' },
+  whatsapp_support: { label: 'رقم واتساب الدعم', hint: 'الرقم اللي بيتفتح لما المستخدم يضغط تواصل عبر واتساب', kind: 'phone' },
+};
+
+export const legalSlugLabels: Record<string, string> = {
+  terms: 'شروط وأحكام التطبيق',
+  privacy: 'سياسة الخصوصية',
+  return_policy: 'سياسة الإرجاع',
+};
+
+export const auditActionLabels: LabelMap = {
+  INSERT: { label: 'إضافة', tone: 'green' },
+  UPDATE: { label: 'تعديل', tone: 'blue' },
+  DELETE: { label: 'حذف', tone: 'red' },
+};
+
+export const auditEntityLabels: Record<string, string> = {
+  profiles: 'حساب مستخدم',
+  companies: 'شركة',
+  orders: 'طلب',
+  products: 'منتج',
+  wallets: 'محفظة',
+  withdrawal_requests: 'طلب سحب',
+  support_tickets: 'تذكرة دعم',
+  legal_documents: 'مستند قانوني',
+  app_settings: 'إعداد المنصة',
+  discounts: 'خصم',
+};

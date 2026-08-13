@@ -205,6 +205,7 @@ export type Database = {
           added_at: string
           cart_id: string
           id: string
+          is_selected: boolean
           qty: number
           seller_product_id: string
         }
@@ -212,6 +213,7 @@ export type Database = {
           added_at?: string
           cart_id: string
           id?: string
+          is_selected?: boolean
           qty: number
           seller_product_id: string
         }
@@ -219,6 +221,7 @@ export type Database = {
           added_at?: string
           cart_id?: string
           id?: string
+          is_selected?: boolean
           qty?: number
           seller_product_id?: string
         }
@@ -991,39 +994,6 @@ export type Database = {
           },
           {
             foreignKeyName: "favorite_products_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      favorites: {
-        Row: {
-          created_at: string
-          seller_product_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          seller_product_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          seller_product_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "favorites_seller_product_id_fkey"
-            columns: ["seller_product_id"]
-            isOneToOne: false
-            referencedRelation: "seller_products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "favorites_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -3349,6 +3319,7 @@ export type Database = {
           added_at: string
           cart_id: string
           id: string
+          is_selected: boolean
           qty: number
           seller_product_id: string
         }
@@ -3414,9 +3385,22 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_overview_counts: { Args: never; Returns: Json }
       admin_reject_seller: {
         Args: { p_note?: string; p_profile_id: string }
         Returns: undefined
+      }
+      admin_sales_by_specialty: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_sales_range: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_sales_series: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
       }
       admin_set_account_status: {
         Args: {

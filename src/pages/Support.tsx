@@ -1,14 +1,14 @@
-// الدعم الفني — تذاكر مع محادثة + إدارة الأسئلة الشائعة + المستندات القانونية.
+// الدعم الفني — رسائل المستخدمين داخل التطبيق + الأسئلة الشائعة + شروط التطبيق.
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
 import { useAdmin } from '../components/Guard';
 import { PageHeader, Btn, Field, Input, Textarea, StatusChip, Select, Card, Toggle } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
-import { Modal } from '../components/Modal';
+import { Modal, ConfirmDialog } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { fmtDateTime } from '../lib/format';
-import { ticketStatusLabels, labelOf } from '../lib/labels';
+import { ticketStatusLabels, labelOf, legalSlugLabels } from '../lib/labels';
 
 type Tab = 'tickets' | 'faqs' | 'legal';
 
@@ -16,13 +16,16 @@ export default function Support() {
   const [tab, setTab] = useState<Tab>('tickets');
   return (
     <div>
-      <PageHeader title="الدعم الفني" />
+      <PageHeader
+        title="الدعم الفني"
+        subtitle="رسائل المستخدمين داخل التطبيق، والأسئلة الشائعة، وشروط التطبيق اللي بتظهر في الموبايل"
+      />
       <div className="mb-4 flex w-fit gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-line">
         {(
           [
-            ['tickets', 'التذاكر'],
+            ['tickets', 'رسائل الدعم'],
             ['faqs', 'الأسئلة الشائعة'],
-            ['legal', 'المستندات القانونية'],
+            ['legal', 'شروط التطبيق'],
           ] as [Tab, string][]
         ).map(([k, label]) => (
           <button
@@ -123,7 +126,10 @@ function Tickets() {
 
   return (
     <>
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-xl text-sm text-subtext">
+          الرسائل اللي المستخدم بيبعتها من داخل التطبيق تظهر هنا. تقدر تفتح الرسالة وترد عليها. التواصل عبر واتساب ما بيظهرش في الصفحة دي.
+        </p>
         <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
           <option value="all">كل الحالات</option>
           {Object.entries(ticketStatusLabels).map(([k, v]) => (
@@ -141,7 +147,7 @@ function Tickets() {
         hasMore={(data?.length ?? 0) > PAGE_SIZE}
         onPage={setPage}
         onRowClick={setOpen}
-        emptyTitle="لا توجد تذاكر"
+        emptyTitle="لا توجد رسائل دعم بعد"
       />
       {open && <TicketChat ticket={open} onClose={() => setOpen(null)} />}
     </>
@@ -262,6 +268,9 @@ function Faqs() {
 
   return (
     <Card className="p-4">
+      <p className="mb-3 text-sm text-subtext">
+        الأسئلة دي بتظهر للمستخدم في التطبيق عشان يلاقي الإجابة من غير ما يكلّم الدعم.
+      </p>
       <div className="mb-3 flex justify-end">
         <Btn variant="accent" onClick={() => setEditing({ sort_order: (data?.length ?? 0) + 1 })}>+ إضافة سؤال</Btn>
       </div>
@@ -303,94 +312,228 @@ function Faqs() {
   );
 }
 
-type LegalDoc = { id: string; slug: string; locale: string; version: number; body: string; published_at: string | null };
+type LegalSlug = 'terms' | 'privacy' | 'return_policy';
+type LegalDoc = { id: string; slug: LegalSlug; locale: string; version: number; body: string; published_at: string | null };
+
+const LEGAL_SLUGS: LegalSlug[] = ['terms', 'privacy', 'return_policy'];
+
+function clausesOf(body: string): string[] {
+  return body.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+}
 
 function Legal() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const [editing, setEditing] = useState<Partial<LegalDoc> | null>(null);
+  const [editing, setEditing] = useState<LegalDoc | null>(null);
+  const [creating, setCreating] = useState<LegalSlug | null>(null);
+  const [deleting, setDeleting] = useState<LegalDoc | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['legal'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('legal_documents').select('*').order('slug');
+      const { data, error } = await supabase.from('legal_documents').select('*').eq('locale', 'ar').order('slug');
       if (error) throw new Error(arError(error));
       return data as LegalDoc[];
     },
   });
 
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!editing?.slug?.trim() || !editing?.body?.trim()) throw new Error('المعرف والمحتوى مطلوبان');
-      const payload = {
-        slug: editing.slug.trim(),
-        locale: editing.locale ?? 'ar',
-        version: editing.version ?? 1,
-        body: editing.body,
-        published_at: new Date().toISOString(),
-      };
-      const q = editing.id
-        ? supabase.from('legal_documents').update(payload).eq('id', editing.id)
-        : supabase.from('legal_documents').insert(payload);
-      const { error } = await q;
-      if (error) throw new Error(arError(error));
-    },
-    onSuccess: () => {
-      toast('success', 'تم النشر');
-      setEditing(null);
-      qc.invalidateQueries({ queryKey: ['legal'] });
-    },
-    onError: (e) => toast('error', (e as Error).message),
-  });
+  const docs = data ?? [];
+  const missing = LEGAL_SLUGS.filter((slug) => !docs.some((d) => d.slug === slug));
 
   return (
-    <Card className="p-4">
-      <div className="mb-3 flex justify-end">
-        <Btn variant="accent" onClick={() => setEditing({ locale: 'ar', version: 1 })}>+ مستند جديد</Btn>
-      </div>
+    <div className="space-y-4">
+      <p className="text-sm text-subtext">
+        النصوص دي بتظهر في التطبيق عند التسجيل وفي قائمة الحساب. عدّل البند أو زوّد أو امسح — التغيير يظهر للمستخدم فور الحفظ.
+      </p>
       {isLoading ? (
-        <div className="py-6 text-center text-sm text-subtext">جارٍ التحميل…</div>
-      ) : (data ?? []).length === 0 ? (
-        <div className="py-6 text-center text-sm text-subtext">لا توجد مستندات (مثل: privacy / terms)</div>
+        <Card className="p-4">
+          <div className="py-6 text-center text-sm text-subtext">جارٍ التحميل…</div>
+        </Card>
       ) : (
-        <div className="divide-y divide-line">
-          {(data ?? []).map((d) => (
-            <div key={d.id} className="flex items-center gap-3 py-2.5 text-sm">
-              <span className="flex-1 font-medium" dir="ltr">{d.slug}</span>
-              <span className="text-xs text-subtext" dir="ltr">v{d.version} · {d.locale}</span>
-              <span className="text-xs text-subtext">{d.published_at ? fmtDateTime(d.published_at) : 'غير منشور'}</span>
-              <Btn variant="ghost" onClick={() => setEditing(d)}>تحرير</Btn>
-            </div>
+        <>
+          {docs.map((d) => (
+            <LegalCard key={d.id} doc={d} onEdit={() => setEditing(d)} onDelete={() => setDeleting(d)} />
           ))}
-        </div>
+          {missing.length > 0 && (
+            <Card className="p-4">
+              <div className="mb-3 text-sm font-medium">مستندات لسه مش موجودة</div>
+              <div className="flex flex-wrap gap-2">
+                {missing.map((slug) => (
+                  <Btn key={slug} variant="ghost" onClick={() => setCreating(slug)}>
+                    + {legalSlugLabels[slug]}
+                  </Btn>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
       )}
       {editing && (
-        <Modal title={editing.id ? `تحرير — ${editing.slug}` : 'مستند قانوني جديد'} open onClose={() => setEditing(null)} wide>
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="المعرف (slug)" hint="privacy / terms">
-                <Input dir="ltr" value={editing.slug ?? ''} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} disabled={!!editing.id} />
-              </Field>
-              <Field label="اللغة">
-                <Select value={editing.locale ?? 'ar'} onChange={(e) => setEditing({ ...editing, locale: e.target.value })}>
-                  <option value="ar">عربي</option>
-                  <option value="en">English</option>
-                </Select>
-              </Field>
-              <Field label="الإصدار">
-                <Input dir="ltr" type="number" min="1" value={editing.version ?? 1} onChange={(e) => setEditing({ ...editing, version: Number(e.target.value) })} />
-              </Field>
-            </div>
-            <Field label="المحتوى">
-              <Textarea className="min-h-64" value={editing.body ?? ''} onChange={(e) => setEditing({ ...editing, body: e.target.value })} />
-            </Field>
-            <div className="flex justify-end gap-2">
-              <Btn variant="ghost" onClick={() => setEditing(null)}>إلغاء</Btn>
-              <Btn variant="accent" busy={save.isPending} onClick={() => save.mutate()}>نشر</Btn>
-            </div>
-          </div>
-        </Modal>
+        <LegalEditor
+          title={`تعديل — ${legalSlugLabels[editing.slug] ?? editing.slug}`}
+          initialClauses={clausesOf(editing.body)}
+          onClose={() => setEditing(null)}
+          onSave={async (clauses) => {
+            const { error } = await supabase
+              .from('legal_documents')
+              .update({
+                body: clauses.join('\n'),
+                version: editing.version + 1,
+                published_at: new Date().toISOString(),
+              })
+              .eq('id', editing.id);
+            if (error) throw new Error(arError(error));
+            toast('success', 'تم حفظ الشروط — هتظهر في التطبيق فورًا');
+            setEditing(null);
+            qc.invalidateQueries({ queryKey: ['legal'] });
+          }}
+        />
+      )}
+      {creating && (
+        <LegalEditor
+          title={`إضافة — ${legalSlugLabels[creating]}`}
+          initialClauses={['']}
+          onClose={() => setCreating(null)}
+          onSave={async (clauses) => {
+            const { error } = await supabase.from('legal_documents').insert({
+              slug: creating,
+              locale: 'ar',
+              version: 1,
+              body: clauses.join('\n'),
+              published_at: new Date().toISOString(),
+            });
+            if (error) throw new Error(arError(error));
+            toast('success', 'تم إضافة المستند');
+            setCreating(null);
+            qc.invalidateQueries({ queryKey: ['legal'] });
+          }}
+        />
+      )}
+      {deleting && (
+        <ConfirmDialog
+          open
+          danger
+          title="حذف المستند؟"
+          message={`هيتشال «${legalSlugLabels[deleting.slug] ?? deleting.slug}» من التطبيق، والمستخدم مش هيشوفه لحد ما تضيفه تاني.`}
+          confirmLabel="حذف"
+          onClose={() => setDeleting(null)}
+          onConfirm={async () => {
+            const { error } = await supabase.from('legal_documents').delete().eq('id', deleting.id);
+            if (error) {
+              toast('error', arError(error));
+              return;
+            }
+            toast('success', 'تم الحذف');
+            setDeleting(null);
+            qc.invalidateQueries({ queryKey: ['legal'] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LegalCard({ doc, onEdit, onDelete }: { doc: LegalDoc; onEdit: () => void; onDelete: () => void }) {
+  const clauses = clausesOf(doc.body);
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-bold">{legalSlugLabels[doc.slug] ?? doc.slug}</h2>
+          <p className="mt-0.5 text-xs text-subtext">
+            {clauses.length} بند · آخر تحديث {fmtDateTime(doc.published_at)}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Btn variant="ghost" onClick={onDelete}>حذف</Btn>
+          <Btn variant="accent" onClick={onEdit}>تعديل البنود</Btn>
+        </div>
+      </div>
+      {clauses.length === 0 ? (
+        <p className="text-sm text-subtext">لا توجد بنود بعد</p>
+      ) : (
+        <ol className="space-y-2">
+          {clauses.map((clause, i) => (
+            <li key={`${i}-${clause.slice(0, 24)}`} className="flex gap-3 text-sm">
+              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-bold text-white">
+                {i + 1}
+              </span>
+              <span className="leading-6">{clause}</span>
+            </li>
+          ))}
+        </ol>
       )}
     </Card>
+  );
+}
+
+function LegalEditor({
+  title,
+  initialClauses,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  initialClauses: string[];
+  onClose: () => void;
+  onSave: (clauses: string[]) => Promise<void>;
+}) {
+  const { toast } = useToast();
+  const [clauses, setClauses] = useState(initialClauses.length ? initialClauses : ['']);
+  const [saving, setSaving] = useState(false);
+
+  function setClause(index: number, value: string) {
+    setClauses((prev) => prev.map((c, i) => (i === index ? value : c)));
+  }
+
+  async function submit() {
+    const cleaned = clauses.map((c) => c.trim()).filter((c) => c.length > 0);
+    if (cleaned.length === 0) {
+      toast('error', 'أضف بندًا واحدًا على الأقل');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(cleaned);
+    } catch (e) {
+      toast('error', (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={title} open onClose={onClose} wide>
+      <p className="mb-4 text-sm text-subtext">كل خانة بند يظهر برقم في التطبيق. تقدر تزود أو تمسح أي بند.</p>
+      <div className="space-y-3">
+        {clauses.map((clause, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="mt-2 grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[11px] font-bold text-white">
+              {i + 1}
+            </span>
+            <Textarea
+              className="min-h-16"
+              value={clause}
+              onChange={(e) => setClause(i, e.target.value)}
+              placeholder="اكتب نص البند…"
+            />
+            <Btn
+              variant="ghost"
+              className="mt-1 shrink-0"
+              onClick={() => setClauses((prev) => (prev.length === 1 ? [''] : prev.filter((_, j) => j !== i)))}
+            >
+              حذف
+            </Btn>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <Btn variant="ghost" onClick={() => setClauses((prev) => [...prev, ''])}>+ بند جديد</Btn>
+        <div className="flex gap-2">
+          <Btn variant="ghost" onClick={onClose}>إلغاء</Btn>
+          <Btn variant="accent" busy={saving} onClick={() => void submit()}>حفظ ونشر</Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }

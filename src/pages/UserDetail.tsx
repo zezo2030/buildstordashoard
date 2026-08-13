@@ -4,11 +4,11 @@ import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
-import { setAccountStatus } from '../api/admin';
+import { suspendAccount, reactivateAccount, type AccountKind } from '../api/accounts';
 import { setUserPassword, generatePassword, MIN_PASSWORD_LENGTH } from '../api/account';
 import { useAdmin } from '../components/Guard';
 import {
-  PageHeader, Card, StatusChip, Money, Btn, Field, Input, Spinner, ErrorState,
+  PageHeader, Card, StatusChip, Money, Btn, Field, Input, Textarea, Spinner, ErrorState,
 } from '../components/ui';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -30,12 +30,19 @@ const ticketStatusLabel: Record<string, { label: string; tone: 'gray' | 'green' 
   closed: { label: 'مغلقة', tone: 'gray' },
 };
 
+// الصفحة دي ملف شخصي دايمًا، يعني الـ id بتاعها profiles.id — البائع في جدول
+// الحسابات كيانه شركة، لكن هنا إحنا على ملفه هو. عمرنا ما نمرّر id شركة من هنا.
+// الفرق بين النوعين دون بائع وصفي بس: الاتنين بيروحوا على admin_suspend_account.
+const accountKindOf = (role: string | null | undefined): AccountKind =>
+  role === 'company_buyer' ? 'company_buyer' : 'individual';
+
 export default function UserDetail() {
   const { id } = useParams<{ id: string }>();
   const me = useAdmin();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [statusTarget, setStatusTarget] = useState<'active' | 'suspended' | null>(null);
+  const [reason, setReason] = useState('');
   const [pwdOpen, setPwdOpen] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -84,13 +91,23 @@ export default function UserDetail() {
     },
   });
 
+  // نفس طريق جدول الحسابات بالظبط: تعليق بسبب إجباري وختم زمني، مش الغلاف القديم
+  // اللي كان بيكتب سبب معلّب. والإبطال بيمسّ ['accounts'] و['accounts-stats'] عشان
+  // الرجوع للتاب في أقل من 30 ثانية ما يعرضش الصف بحالة قديمة.
   const statusMut = useMutation({
-    mutationFn: (to: 'active' | 'suspended') => setAccountStatus(id!, to),
+    mutationFn: (to: 'active' | 'suspended') => {
+      const kind = accountKindOf(data?.profile.role);
+      return to === 'suspended'
+        ? suspendAccount(kind, id!, reason)
+        : reactivateAccount(kind, id!);
+    },
     onSuccess: (_d, to) => {
       toast('success', to === 'suspended' ? 'تم تعليق الحساب' : 'تم إعادة تفعيل الحساب');
       setStatusTarget(null);
+      setReason('');
       qc.invalidateQueries({ queryKey: ['user', id] });
-      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['accounts-stats'] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -124,8 +141,14 @@ export default function UserDetail() {
             {p.id === me.id && (
               <Link to="/account" className="text-sm text-accent hover:underline">حسابي</Link>
             )}
+            {/* الرجوع لازم يوصّل للتاب اللي فيه الصف فعلاً: مشتري الشركة مش موجود
+                في تاب الأفراد، والمسارات القديمة بتحوّل عليه غلط. */}
             <Link
-              to={p.role === 'seller' ? '/users/sellers' : '/users/buyers'}
+              to={
+                p.role === 'seller' ? '/accounts/sellers'
+                  : p.role === 'company_buyer' ? '/accounts/companies'
+                  : '/accounts/individuals'
+              }
               className="flex items-center gap-1 text-sm text-subtext hover:text-primary"
             >
               <ArrowRight size={15} /> رجوع
@@ -301,18 +324,55 @@ export default function UserDetail() {
         </Card>
       </div>
 
+      {/* السبب إجباري زي جدول الحسابات — الزرار مقفول لحد ما يتكتب، والـ RPC
+          نفسه بيرفض السبب الفاضي كخط دفاع تاني. */}
+      {statusTarget === 'suspended' && (
+        <Modal
+          title={`تعليق — ${p.full_name}`}
+          open
+          onClose={() => { setStatusTarget(null); setReason(''); }}
+        >
+          <div className="space-y-4">
+            <p className="rounded-lg bg-red-50 p-3 text-sm text-danger">
+              سيتم إيقاف الحساب وكل حساباته الفرعية عن الدخول.
+            </p>
+
+            <Field label="سبب التعليق" hint="إجباري — بيتسجّل مع التاريخ وبيظهر في جدول الحسابات">
+              <Textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="مثال: مخالفة شروط الاستخدام — بلاغات متكررة"
+              />
+            </Field>
+
+            <div className="flex justify-end gap-2">
+              <Btn
+                variant="ghost"
+                onClick={() => { setStatusTarget(null); setReason(''); }}
+                disabled={statusMut.isPending}
+              >
+                إلغاء
+              </Btn>
+              <Btn
+                variant="danger"
+                busy={statusMut.isPending}
+                disabled={!reason.trim()}
+                onClick={() => statusMut.mutate('suspended')}
+              >
+                تعليق
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       <ConfirmDialog
-        open={!!statusTarget}
-        title={statusTarget === 'suspended' ? 'تعليق الحساب' : 'إعادة تفعيل الحساب'}
-        message={
-          statusTarget === 'suspended'
-            ? `سيتم تعليق حساب «${p.full_name}» ومنعه من استخدام التطبيق. متابعة؟`
-            : `سيتم إعادة تفعيل حساب «${p.full_name}». متابعة؟`
-        }
-        confirmLabel={statusTarget === 'suspended' ? 'تعليق' : 'إعادة تفعيل'}
-        danger={statusTarget === 'suspended'}
+        open={statusTarget === 'active'}
+        title="إعادة تفعيل الحساب"
+        message={`سيتم إعادة تفعيل حساب «${p.full_name}». متابعة؟`}
+        confirmLabel="إعادة تفعيل"
         busy={statusMut.isPending}
-        onConfirm={() => statusTarget && statusMut.mutate(statusTarget)}
+        onConfirm={() => statusMut.mutate('active')}
         onClose={() => setStatusTarget(null)}
       />
 

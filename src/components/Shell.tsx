@@ -2,7 +2,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  LayoutDashboard, Store, Building2, Users, UserRound, Package, ClipboardList, ImageIcon, ShoppingCart,
+  LayoutDashboard, Store, Building2, UserRound, Package, ClipboardList, ImageIcon, ShoppingCart,
   ReceiptText, FileSpreadsheet, Undo2, Wallet, Banknote, BadgePercent, Truck,
   CreditCard, Headset, Bell, Settings, ScrollText, LogOut, ChevronLeft,
 } from 'lucide-react';
@@ -84,10 +84,10 @@ export function Shell() {
     {
       title: 'الحسابات',
       items: [
-        { to: '/sellers', label: 'طلبات البائعين', icon: <Store size={17} strokeWidth={1.75} />, badge: badges?.sellers },
-        { to: '/users/buyers', label: 'مستخدمون عاديون', icon: <UserRound size={17} strokeWidth={1.75} /> },
-        { to: '/users/sellers', label: 'البائعون', icon: <Users size={17} strokeWidth={1.75} /> },
-        { to: '/companies', label: 'الشركات', icon: <Building2 size={17} strokeWidth={1.75} /> },
+        { to: '/requests/materials', label: 'طلبات المواد', icon: <FileSpreadsheet size={17} strokeWidth={1.75} />, badge: badges?.requests },
+        { to: '/accounts/individuals', label: 'مشتري فرد', icon: <UserRound size={17} strokeWidth={1.75} /> },
+        { to: '/accounts/companies', label: 'مشتري شركة', icon: <Building2 size={17} strokeWidth={1.75} /> },
+        { to: '/accounts/sellers', label: 'البائعون', icon: <Store size={17} strokeWidth={1.75} />, badge: badges?.sellers },
       ],
     },
     {
@@ -96,7 +96,6 @@ export function Shell() {
         { to: '/catalog/products', label: 'المنتجات', icon: <Package size={17} strokeWidth={1.75} /> },
         { to: '/catalog/taxonomy', label: 'التخصصات والفئات', icon: <ClipboardList size={17} strokeWidth={1.75} /> },
         { to: '/catalog/banners', label: 'بانرات الرئيسية', icon: <ImageIcon size={17} strokeWidth={1.75} /> },
-        { to: '/catalog/requests', label: 'طلبات المنتجات', icon: <FileSpreadsheet size={17} strokeWidth={1.75} />, badge: badges?.requests },
       ],
     },
     {
@@ -104,7 +103,6 @@ export function Shell() {
       items: [
         { to: '/orders', label: 'الطلبات', icon: <ShoppingCart size={17} strokeWidth={1.75} /> },
         { to: '/invoices', label: 'الفواتير', icon: <ReceiptText size={17} strokeWidth={1.75} /> },
-        { to: '/quotations', label: 'المقايسات', icon: <FileSpreadsheet size={17} strokeWidth={1.75} /> },
         { to: '/returns', label: 'المرتجعات', icon: <Undo2 size={17} strokeWidth={1.75} /> },
       ],
     },
