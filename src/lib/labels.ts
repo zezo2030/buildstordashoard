@@ -20,6 +20,9 @@ export const accountStatusLabels: LabelMap = {
 };
 
 export const orderStatusLabels: LabelMap = {
+  // الحالتان الأوليان من دورة الطلب (المرحلة 2) — الترتيب هنا هو ترتيب الدورة
+  awaiting_seller_review: { label: 'بانتظار مراجعة البائع', tone: 'orange' },
+  quoted: { label: 'عرض سعر للمشتري', tone: 'blue' },
   awaiting_payment: { label: 'بانتظار الدفع', tone: 'orange' },
   confirmed: { label: 'مؤكد', tone: 'blue' },
   preparing: { label: 'قيد التجهيز', tone: 'navy' },

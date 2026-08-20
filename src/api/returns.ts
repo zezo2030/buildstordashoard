@@ -91,3 +91,43 @@ export async function fetchReturnsStats(from: string | null, to: string | null):
     refund: num(r.refund),
   };
 }
+
+// ---------- إجراءات المرتجع ------------------------------------------------
+// دلوقتي القرار مش بيقيّد الرصيد — القيد بقى عند الاستلام (receive_return)،
+// عشان المشتري ما ياخدش القيمة قبل ما البضاعة ترجع فعلًا.
+
+async function callRpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.rpc(fn as never, args as never);
+  if (error) throw new Error(arError(error));
+  return data as T;
+}
+
+export type ReturnDecision = {
+  returnItemId: string;
+  qtyAccepted: number;
+  qtyRejected: number;
+  rejectionReason?: string | null;
+};
+
+/** قرار البائع/الأدمن على بنود السند. مابيقيّدش رصيد — بس بيحدد المقبول والمرفوض. */
+export async function decideReturn(
+  returnId: string,
+  decisions: ReturnDecision[],
+  rejectionReason?: string | null,
+) {
+  return callRpc('decide_return', {
+    p_return_id: returnId,
+    p_decisions: decisions.map((d) => ({
+      return_item_id: d.returnItemId,
+      qty_accepted: d.qtyAccepted,
+      qty_rejected: d.qtyRejected,
+      rejection_reason: d.rejectionReason ?? null,
+    })),
+    p_rejection_reason: rejectionReason ?? null,
+  });
+}
+
+/** استلام البضاعة فعليًا ⇒ عندها بس بيتقيّد المبلغ في محفظة المشتري. */
+export async function receiveReturn(returnId: string) {
+  return callRpc('receive_return', { p_return_id: returnId });
+}

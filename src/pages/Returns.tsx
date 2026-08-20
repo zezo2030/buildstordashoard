@@ -2,13 +2,18 @@
 // بنفس بنية الطلبات والفواتير: كروت بفترة + جدول بفرز وبحث من الداتابيز.
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, keepPreviousData, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Undo2, Package, MapPin, ShoppingCart, Users, Store, Wallet, FileText, Paperclip,
 } from 'lucide-react';
-import { fetchReturns, fetchReturnsStats, type ReturnRow, type ReturnSortKey } from '../api/returns';
+import {
+  fetchReturns, fetchReturnsStats, decideReturn, receiveReturn,
+  type ReturnRow, type ReturnSortKey, type ReturnDecision,
+} from '../api/returns';
 import { supabase, arError } from '../lib/supabase';
-import { PageHeader, KpiCard, StatusChip, Select, Input, Money, Card, ErrorState } from '../components/ui';
+import {
+  PageHeader, KpiCard, StatusChip, Select, Input, Money, Card, ErrorState, Btn, Textarea,
+} from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
 import { LocationCell } from '../components/LocationCell';
@@ -177,7 +182,136 @@ function fileName(path: string) {
   return path.split('/').pop() || path;
 }
 
+/**
+ * قرار البائع على بنود السند + تعليم الاستلام.
+ *
+ * القرار مابيقيّدش رصيد — القيد بيحصل في `receive_return` لما البضاعة توصل
+ * فعلًا. من غير الفصل ده كان المشتري بياخد القيمة والمنتج لسه معاه.
+ */
+function DecisionPanel({ returnId, items, unitOf, onDone }: {
+  returnId: string;
+  items: ReturnItemRow[];
+  unitOf: (it: ReturnItemRow) => string;
+  onDone: () => void;
+}) {
+  // المبدئي: قبول الكمية المطلوبة كاملة لكل بند.
+  const [accepted, setAccepted] = useState<Record<string, number>>(() =>
+    Object.fromEntries(items.map((it) => [it.id, Number(it.qty_requested ?? 0)])),
+  );
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+
+  const decide = useMutation({
+    mutationFn: () => {
+      const decisions: ReturnDecision[] = items.map((it) => {
+        const req = Number(it.qty_requested ?? 0);
+        const acc = Math.max(0, Math.min(req, accepted[it.id] ?? 0));
+        return {
+          returnItemId: it.id,
+          qtyAccepted: acc,
+          qtyRejected: req - acc,
+          rejectionReason: req - acc > 0 ? (reasons[it.id] || null) : null,
+        };
+      });
+      return decideReturn(returnId, decisions, note.trim() || null);
+    },
+    onMutate: () => setErr(null),
+    onSuccess: onDone,
+    onError: (e: Error) => setErr(e.message),
+  });
+
+  const acceptAll = () =>
+    setAccepted(Object.fromEntries(items.map((it) => [it.id, Number(it.qty_requested ?? 0)])));
+  const rejectAll = () => setAccepted(Object.fromEntries(items.map((it) => [it.id, 0])));
+
+  return (
+    <div className="mt-3 rounded-lg border border-accent/40 bg-accent/5 p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-sm font-bold">قرار على السند</div>
+        <div className="flex gap-2">
+          <Btn variant="ghost" onClick={acceptAll}>قبول الكل</Btn>
+          <Btn variant="ghost" onClick={rejectAll}>رفض الكل</Btn>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {items.map((it) => {
+          const req = Number(it.qty_requested ?? 0);
+          const acc = accepted[it.id] ?? 0;
+          return (
+            <div key={it.id} className="rounded-md border border-line bg-white p-2.5">
+              <div className="mb-1.5 text-sm font-medium">{it.order_item?.name_ar ?? '—'}</div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <label className="text-xs text-subtext">
+                  المقبول من {qty(req)} {unitOf(it)}
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={req}
+                  value={acc}
+                  onChange={(e) =>
+                    setAccepted((cur) => ({
+                      ...cur,
+                      [it.id]: Math.max(0, Math.min(req, Number(e.target.value))),
+                    }))
+                  }
+                  className="w-24"
+                />
+                {req - acc > 0 && (
+                  <Input
+                    placeholder="سبب رفض هذا الصنف"
+                    value={reasons[it.id] ?? ''}
+                    onChange={(e) => setReasons((cur) => ({ ...cur, [it.id]: e.target.value }))}
+                    className="min-w-[180px] flex-1"
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2">
+        <Textarea
+          rows={2}
+          placeholder="ملاحظة عامة على القرار (اختياري)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
+
+      {err && <p className="mt-2 text-sm text-danger">{err}</p>}
+
+      <p className="mt-2 text-xs text-subtext">
+        القرار مش بيحوّل فلوس — المبلغ بيتقيّد في محفظة المشتري بعد تعليم استلام البضاعة.
+      </p>
+
+      <div className="mt-2">
+        <Btn onClick={() => decide.mutate()} busy={decide.isPending}>حفظ القرار</Btn>
+      </div>
+    </div>
+  );
+}
+
 function ReturnModal({ row, onClose }: { row: ReturnRow; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [actionErr, setActionErr] = useState<string | null>(null);
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['return', row.id] });
+    void queryClient.invalidateQueries({ queryKey: ['returns'] });
+    void queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
+  };
+
+  const receive = useMutation({
+    mutationFn: () => receiveReturn(row.id),
+    onMutate: () => setActionErr(null),
+    onSuccess: refresh,
+    onError: (e: Error) => setActionErr(e.message),
+  });
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['return', row.id],
     queryFn: async () => {
@@ -315,6 +449,32 @@ function ReturnModal({ row, onClose }: { row: ReturnRow; onClose: () => void }) 
               </tbody>
             </table>
           </div>
+
+          {/* لسه مافيش قرار ⇒ نموذج القرار. اتقرر ومستنّي البضاعة ⇒ زر الاستلام. */}
+          {!data?.seller_decided_at && items.length > 0 && (
+            <DecisionPanel
+              returnId={row.id}
+              items={items}
+              unitOf={(it) => it.order_item?.unit_ar ?? ''}
+              onDone={refresh}
+            />
+          )}
+
+          {!!data?.seller_decided_at && !data?.refunded_at && Number(data.refund_amount ?? 0) > 0 && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/5 p-3">
+              <div className="text-sm">
+                <div className="font-bold">البضاعة وصلت؟</div>
+                <p className="text-xs text-subtext">
+                  بتعليم الاستلام بيتقيّد <Money value={data.refund_amount} /> في محفظة المشتري.
+                </p>
+              </div>
+              <Btn onClick={() => receive.mutate()} busy={receive.isPending}>
+                تم استلام المرتجع
+              </Btn>
+            </div>
+          )}
+
+          {actionErr && <p className="mt-2 text-sm text-danger">{actionErr}</p>}
 
           <dl className="mt-3 space-y-1.5 rounded-lg bg-surface px-3 py-2.5 text-sm">
             <div className="flex justify-between">

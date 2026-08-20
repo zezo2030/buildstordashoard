@@ -812,6 +812,10 @@ function ConvertLevelModal({
 
   const run = useMutation({
     mutationFn: async () => {
+      // الدالة بتطلب مستوى محدد (البارامتر بلا default في الداتابيز).
+      // الأنواع القديمة كانت بتسمح بـnull فالنداء كان هيفشل وقت التشغيل.
+      if (!levelCategoryId) throw new Error('اختر المستوى المراد تحويله أولاً');
+
       const { data, error } = await supabase.rpc('convert_level_for_branches', {
         p_specialty_id: specialtyId,
         p_level_category_id: levelCategoryId,

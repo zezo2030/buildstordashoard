@@ -3,8 +3,10 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
+import { uploadProductImage } from '../lib/product-image';
 import { PageHeader, Btn, Field, Input, Select, Toggle, StatusChip, Money } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
+import { ImportProductsModal } from '../components/ImportProductsModal';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 
@@ -22,29 +24,6 @@ type Row = {
   seller_products: { count: number }[];
 };
 
-async function uploadProductImage(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('الملف يجب أن يكون صورة');
-  if (file.size > 5 * 1024 * 1024) throw new Error('حجم الصورة يجب ألا يتجاوز 5 ميجابايت');
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-  const tryBuckets = [
-    { bucket: 'product-images', path: `catalog/${crypto.randomUUID()}.${ext}` },
-    { bucket: 'taxonomy-images', path: `products/${crypto.randomUUID()}.${ext}` },
-  ] as const;
-  let lastErr: Error | null = null;
-  for (const t of tryBuckets) {
-    const { error } = await supabase.storage.from(t.bucket).upload(t.path, file, {
-      upsert: false,
-      contentType: file.type,
-    });
-    if (!error) {
-      const { data } = supabase.storage.from(t.bucket).getPublicUrl(t.path);
-      return data.publicUrl;
-    }
-    lastErr = new Error(arError(error));
-  }
-  throw lastErr ?? new Error('فشل رفع الصورة');
-}
-
 export default function Products() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -53,6 +32,7 @@ export default function Products() {
   const [specialty, setSpecialty] = useState('all');
   const [editing, setEditing] = useState<Row | 'new' | null>(null);
   const [offersFor, setOffersFor] = useState<Row | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const { data: specialties } = useQuery({
     queryKey: ['specialties-list'],
@@ -156,6 +136,7 @@ export default function Products() {
                 <option key={s.id} value={s.id}>{s.name_ar}</option>
               ))}
             </Select>
+            <Btn variant="ghost" onClick={() => setImporting(true)}>رفع Excel</Btn>
             <Btn variant="accent" onClick={() => setEditing('new')}>+ إضافة منتج</Btn>
           </>
         }
@@ -182,6 +163,16 @@ export default function Products() {
         />
       )}
       {offersFor && <OffersModal product={offersFor} onClose={() => setOffersFor(null)} />}
+      {importing && (
+        <ImportProductsModal
+          open
+          onClose={() => setImporting(false)}
+          onDone={() => {
+            setImporting(false);
+            qc.invalidateQueries({ queryKey: ['products'] });
+          }}
+        />
+      )}
     </div>
   );
 }

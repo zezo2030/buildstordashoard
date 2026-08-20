@@ -374,6 +374,9 @@ export type Database = {
           ratings_count: number
           slug: string | null
           street: string | null
+          suspend_reason: string | null
+          suspended_at: string | null
+          suspended_by: string | null
           tax_number: string | null
           type: Database["public"]["Enums"]["company_type"]
           updated_at: string
@@ -406,6 +409,9 @@ export type Database = {
           ratings_count?: number
           slug?: string | null
           street?: string | null
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          suspended_by?: string | null
           tax_number?: string | null
           type: Database["public"]["Enums"]["company_type"]
           updated_at?: string
@@ -438,6 +444,9 @@ export type Database = {
           ratings_count?: number
           slug?: string | null
           street?: string | null
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          suspended_by?: string | null
           tax_number?: string | null
           type?: Database["public"]["Enums"]["company_type"]
           updated_at?: string
@@ -446,6 +455,13 @@ export type Database = {
           {
             foreignKeyName: "companies_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "companies_suspended_by_fkey"
+            columns: ["suspended_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -568,6 +584,7 @@ export type Database = {
           member_number: number
           owner_id: string
           status: Database["public"]["Enums"]["account_status"]
+          suspended_at: string | null
           updated_at: string
           user_id: string | null
           username: string
@@ -580,6 +597,7 @@ export type Database = {
           member_number: number
           owner_id: string
           status?: Database["public"]["Enums"]["account_status"]
+          suspended_at?: string | null
           updated_at?: string
           user_id?: string | null
           username: string
@@ -592,6 +610,7 @@ export type Database = {
           member_number?: number
           owner_id?: string
           status?: Database["public"]["Enums"]["account_status"]
+          suspended_at?: string | null
           updated_at?: string
           user_id?: string | null
           username?: string
@@ -623,41 +642,54 @@ export type Database = {
       delivery_fee_rules: {
         Row: {
           area: string | null
+          buyer_company_id: string | null
           created_at: string
           fee: number
           free_above: number | null
           governorate: string | null
           id: string
           is_active: boolean
+          kind: string
           min_order_total: number
           priority: number
           seller_company_id: string | null
         }
         Insert: {
           area?: string | null
+          buyer_company_id?: string | null
           created_at?: string
           fee: number
           free_above?: number | null
           governorate?: string | null
           id?: string
           is_active?: boolean
+          kind?: string
           min_order_total?: number
           priority?: number
           seller_company_id?: string | null
         }
         Update: {
           area?: string | null
+          buyer_company_id?: string | null
           created_at?: string
           fee?: number
           free_above?: number | null
           governorate?: string | null
           id?: string
           is_active?: boolean
+          kind?: string
           min_order_total?: number
           priority?: number
           seller_company_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "delivery_fee_rules_buyer_company_id_fkey"
+            columns: ["buyer_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "delivery_fee_rules_seller_company_id_fkey"
             columns: ["seller_company_id"]
@@ -1302,15 +1334,19 @@ export type Database = {
       }
       order_items: {
         Row: {
+          buyer_approved: boolean | null
           created_at: string
           discount_amount: number
           id: string
+          is_available: boolean
           line_total: number
           name_ar: string
           order_id: string
           origin_country: string | null
+          original_unit_price: number | null
           product_id: string | null
           qty: number
+          removed_by_buyer: boolean
           seller_product_id: string | null
           sku: string
           specialty_id: string | null
@@ -1318,15 +1354,19 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          buyer_approved?: boolean | null
           created_at?: string
           discount_amount?: number
           id?: string
+          is_available?: boolean
           line_total: number
           name_ar: string
           order_id: string
           origin_country?: string | null
+          original_unit_price?: number | null
           product_id?: string | null
           qty: number
+          removed_by_buyer?: boolean
           seller_product_id?: string | null
           sku: string
           specialty_id?: string | null
@@ -1334,15 +1374,19 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          buyer_approved?: boolean | null
           created_at?: string
           discount_amount?: number
           id?: string
+          is_available?: boolean
           line_total?: number
           name_ar?: string
           order_id?: string
           origin_country?: string | null
+          original_unit_price?: number | null
           product_id?: string | null
           qty?: number
+          removed_by_buyer?: boolean
           seller_product_id?: string | null
           sku?: string
           specialty_id?: string | null
@@ -1429,6 +1473,7 @@ export type Database = {
         Row: {
           address_id: string | null
           address_snapshot: Json
+          approved_at: string | null
           buyer_company_id: string | null
           buyer_id: string
           cancel_reason: string | null
@@ -1447,6 +1492,8 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
+          quoted_at: string | null
+          review_due_at: string | null
           seller_company_id: string
           site_id: string | null
           status: Database["public"]["Enums"]["order_status"]
@@ -1457,6 +1504,7 @@ export type Database = {
         Insert: {
           address_id?: string | null
           address_snapshot?: Json
+          approved_at?: string | null
           buyer_company_id?: string | null
           buyer_id: string
           cancel_reason?: string | null
@@ -1475,6 +1523,8 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
+          quoted_at?: string | null
+          review_due_at?: string | null
           seller_company_id: string
           site_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -1485,6 +1535,7 @@ export type Database = {
         Update: {
           address_id?: string | null
           address_snapshot?: Json
+          approved_at?: string | null
           buyer_company_id?: string | null
           buyer_id?: string
           cancel_reason?: string | null
@@ -1503,6 +1554,8 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
+          quoted_at?: string | null
+          review_due_at?: string | null
           seller_company_id?: string
           site_id?: string | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -1896,6 +1949,9 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           status: Database["public"]["Enums"]["account_status"]
           subuser_account_code: string | null
+          suspend_reason: string | null
+          suspended_at: string | null
+          suspended_by: string | null
           updated_at: string
         }
         Insert: {
@@ -1916,6 +1972,9 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["account_status"]
           subuser_account_code?: string | null
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          suspended_by?: string | null
           updated_at?: string
         }
         Update: {
@@ -1936,12 +1995,22 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["account_status"]
           subuser_account_code?: string | null
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          suspended_by?: string | null
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "profiles_parent_account_id_fkey"
             columns: ["parent_account_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_suspended_by_fkey"
+            columns: ["suspended_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1980,13 +2049,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "quotations"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_invitations_quotation_id_fkey"
-            columns: ["quotation_id"]
-            isOneToOne: false
-            referencedRelation: "v_quotation_comparison"
-            referencedColumns: ["quotation_id"]
           },
           {
             foreignKeyName: "quotation_invitations_seller_company_id_fkey"
@@ -2047,13 +2109,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "quotation_items_quotation_id_fkey"
-            columns: ["quotation_id"]
-            isOneToOne: false
-            referencedRelation: "v_quotation_comparison"
-            referencedColumns: ["quotation_id"]
-          },
-          {
             foreignKeyName: "quotation_items_selected_seller_company_id_fkey"
             columns: ["selected_seller_company_id"]
             isOneToOne: false
@@ -2069,143 +2124,8 @@ export type Database = {
           },
         ]
       }
-      quotation_offer_lines: {
-        Row: {
-          available_qty: number | null
-          id: string
-          is_available: boolean
-          lead_time_days: number | null
-          line_total: number | null
-          notes: string | null
-          offer_id: string
-          origin_country: string | null
-          quotation_item_id: string
-          unit_price: number | null
-        }
-        Insert: {
-          available_qty?: number | null
-          id?: string
-          is_available?: boolean
-          lead_time_days?: number | null
-          line_total?: number | null
-          notes?: string | null
-          offer_id: string
-          origin_country?: string | null
-          quotation_item_id: string
-          unit_price?: number | null
-        }
-        Update: {
-          available_qty?: number | null
-          id?: string
-          is_available?: boolean
-          lead_time_days?: number | null
-          line_total?: number | null
-          notes?: string | null
-          offer_id?: string
-          origin_country?: string | null
-          quotation_item_id?: string
-          unit_price?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "quotation_offer_lines_offer_id_fkey"
-            columns: ["offer_id"]
-            isOneToOne: false
-            referencedRelation: "quotation_offers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_offer_lines_quotation_item_id_fkey"
-            columns: ["quotation_item_id"]
-            isOneToOne: false
-            referencedRelation: "quotation_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_offer_lines_quotation_item_id_fkey"
-            columns: ["quotation_item_id"]
-            isOneToOne: false
-            referencedRelation: "v_quotation_best_lines"
-            referencedColumns: ["quotation_item_id"]
-          },
-        ]
-      }
-      quotation_offers: {
-        Row: {
-          created_at: string
-          delivery_fee: number
-          id: string
-          lead_time_days: number | null
-          notes: string | null
-          pdf_path: string | null
-          quotation_id: string
-          seller_company_id: string
-          status: Database["public"]["Enums"]["offer_status"]
-          submitted_at: string
-          subtotal: number
-          total: number
-          updated_at: string
-          valid_until: string | null
-        }
-        Insert: {
-          created_at?: string
-          delivery_fee?: number
-          id?: string
-          lead_time_days?: number | null
-          notes?: string | null
-          pdf_path?: string | null
-          quotation_id: string
-          seller_company_id: string
-          status?: Database["public"]["Enums"]["offer_status"]
-          submitted_at?: string
-          subtotal?: number
-          total?: number
-          updated_at?: string
-          valid_until?: string | null
-        }
-        Update: {
-          created_at?: string
-          delivery_fee?: number
-          id?: string
-          lead_time_days?: number | null
-          notes?: string | null
-          pdf_path?: string | null
-          quotation_id?: string
-          seller_company_id?: string
-          status?: Database["public"]["Enums"]["offer_status"]
-          submitted_at?: string
-          subtotal?: number
-          total?: number
-          updated_at?: string
-          valid_until?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "quotation_offers_quotation_id_fkey"
-            columns: ["quotation_id"]
-            isOneToOne: false
-            referencedRelation: "quotations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_offers_quotation_id_fkey"
-            columns: ["quotation_id"]
-            isOneToOne: false
-            referencedRelation: "v_quotation_comparison"
-            referencedColumns: ["quotation_id"]
-          },
-          {
-            foreignKeyName: "quotation_offers_seller_company_id_fkey"
-            columns: ["seller_company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       quotations: {
         Row: {
-          awarded_offer_id: string | null
           buyer_company_id: string | null
           buyer_id: string
           created_at: string
@@ -2220,7 +2140,6 @@ export type Database = {
           valid_until: string | null
         }
         Insert: {
-          awarded_offer_id?: string | null
           buyer_company_id?: string | null
           buyer_id: string
           created_at?: string
@@ -2235,7 +2154,6 @@ export type Database = {
           valid_until?: string | null
         }
         Update: {
-          awarded_offer_id?: string | null
           buyer_company_id?: string | null
           buyer_id?: string
           created_at?: string
@@ -2250,13 +2168,6 @@ export type Database = {
           valid_until?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "quotations_awarded_offer_fk"
-            columns: ["awarded_offer_id"]
-            isOneToOne: false
-            referencedRelation: "quotation_offers"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "quotations_buyer_company_id_fkey"
             columns: ["buyer_company_id"]
@@ -2538,6 +2449,114 @@ export type Database = {
           },
           {
             foreignKeyName: "return_requests_seller_company_id_fkey"
+            columns: ["seller_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seller_buyer_credit: {
+        Row: {
+          buyer_company_id: string
+          created_at: string
+          credit_limit: number
+          ends_on: string | null
+          id: string
+          is_active: boolean
+          seller_company_id: string
+          starts_on: string
+          updated_at: string
+        }
+        Insert: {
+          buyer_company_id: string
+          created_at?: string
+          credit_limit: number
+          ends_on?: string | null
+          id?: string
+          is_active?: boolean
+          seller_company_id: string
+          starts_on: string
+          updated_at?: string
+        }
+        Update: {
+          buyer_company_id?: string
+          created_at?: string
+          credit_limit?: number
+          ends_on?: string | null
+          id?: string
+          is_active?: boolean
+          seller_company_id?: string
+          starts_on?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_buyer_credit_buyer_company_id_fkey"
+            columns: ["buyer_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_buyer_credit_seller_company_id_fkey"
+            columns: ["seller_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seller_discount_rules: {
+        Row: {
+          buyer_company_id: string | null
+          buyer_type: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: string
+          max_total: number | null
+          min_total: number | null
+          percent: number
+          seller_company_id: string
+          updated_at: string
+        }
+        Insert: {
+          buyer_company_id?: string | null
+          buyer_type?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind: string
+          max_total?: number | null
+          min_total?: number | null
+          percent: number
+          seller_company_id: string
+          updated_at?: string
+        }
+        Update: {
+          buyer_company_id?: string | null
+          buyer_type?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          max_total?: number | null
+          min_total?: number | null
+          percent?: number
+          seller_company_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_discount_rules_buyer_company_id_fkey"
+            columns: ["buyer_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_discount_rules_seller_company_id_fkey"
             columns: ["seller_company_id"]
             isOneToOne: false
             referencedRelation: "companies"
@@ -3227,77 +3246,6 @@ export type Database = {
           },
         ]
       }
-      v_quotation_best_lines: {
-        Row: {
-          line_no: number | null
-          line_total: number | null
-          offer_id: string | null
-          product_id: string | null
-          qty: number | null
-          quotation_id: string | null
-          quotation_item_id: string | null
-          seller_company_id: string | null
-          unit_price: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "quotation_items_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_items_quotation_id_fkey"
-            columns: ["quotation_id"]
-            isOneToOne: false
-            referencedRelation: "quotations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_items_quotation_id_fkey"
-            columns: ["quotation_id"]
-            isOneToOne: false
-            referencedRelation: "v_quotation_comparison"
-            referencedColumns: ["quotation_id"]
-          },
-          {
-            foreignKeyName: "quotation_offer_lines_offer_id_fkey"
-            columns: ["offer_id"]
-            isOneToOne: false
-            referencedRelation: "quotation_offers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "quotation_offers_seller_company_id_fkey"
-            columns: ["seller_company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      v_quotation_comparison: {
-        Row: {
-          best_mixed_total: number | null
-          best_single_supplier_total: number | null
-          offers_count: number | null
-          quotation_id: string | null
-        }
-        Insert: {
-          best_mixed_total?: never
-          best_single_supplier_total?: never
-          offers_count?: never
-          quotation_id?: string | null
-        }
-        Update: {
-          best_mixed_total?: never
-          best_single_supplier_total?: never
-          offers_count?: never
-          quotation_id?: string | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
       add_cheapest_offer_to_cart: {
@@ -3338,6 +3286,24 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_accounts_list: {
+        Args: {
+          p_dir?: string
+          p_from?: string
+          p_kind: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_sort?: string
+          p_status?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
+      admin_accounts_stats: {
+        Args: { p_from?: string; p_kind: string; p_to?: string }
+        Returns: Json
+      }
       admin_activate_seller: {
         Args: {
           p_commercial_register?: string
@@ -3355,6 +3321,17 @@ export type Database = {
           p_title_ar: string
         }
         Returns: number
+      }
+      admin_create_seller_company: {
+        Args: {
+          p_commercial_register?: string
+          p_commission_rate?: number
+          p_governorate?: string
+          p_name_ar: string
+          p_owner_id: string
+          p_phone?: string
+        }
+        Returns: string
       }
       admin_dashboard_stats: { Args: never; Returns: Json }
       admin_decide_withdrawal: {
@@ -3385,10 +3362,67 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_invoices_list: {
+        Args: {
+          p_buyer?: string
+          p_dir?: string
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_seller?: string
+          p_sort?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
+      admin_invoices_stats: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_orders_list: {
+        Args: {
+          p_dir?: string
+          p_from?: string
+          p_limit?: number
+          p_method?: string
+          p_offset?: number
+          p_search?: string
+          p_sort?: string
+          p_status?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
       admin_overview_counts: { Args: never; Returns: Json }
+      admin_reactivate_account: {
+        Args: { p_profile_id: string }
+        Returns: undefined
+      }
+      admin_reactivate_company: {
+        Args: { p_company_id: string }
+        Returns: undefined
+      }
       admin_reject_seller: {
         Args: { p_note?: string; p_profile_id: string }
         Returns: undefined
+      }
+      admin_returns_list: {
+        Args: {
+          p_dir?: string
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_sort?: string
+          p_status?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
+      admin_returns_stats: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
       }
       admin_sales_by_specialty: {
         Args: { p_from?: string; p_to?: string }
@@ -3407,6 +3441,18 @@ export type Database = {
           p_profile_id: string
           p_status: Database["public"]["Enums"]["account_status"]
         }
+        Returns: undefined
+      }
+      admin_set_company_commission: {
+        Args: { p_company_id: string; p_rate: number }
+        Returns: undefined
+      }
+      admin_suspend_account: {
+        Args: { p_profile_id: string; p_reason: string }
+        Returns: undefined
+      }
+      admin_suspend_company: {
+        Args: { p_company_id: string; p_reason: string }
         Returns: undefined
       }
       admin_wallet_adjust: {
@@ -3431,12 +3477,12 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      award_quotation: { Args: { p_offer_id: string }; Returns: string }
-      cancel_order: {
-        Args: { p_order_id: string; p_reason?: string }
+      buyer_respond_quote: {
+        Args: { p_order_id: string; p_removed_item_ids?: string[] }
         Returns: {
           address_id: string | null
           address_snapshot: Json
+          approved_at: string | null
           buyer_company_id: string | null
           buyer_id: string
           cancel_reason: string | null
@@ -3455,6 +3501,8 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
+          quoted_at: string | null
+          review_due_at: string | null
           seller_company_id: string
           site_id: string | null
           status: Database["public"]["Enums"]["order_status"]
@@ -3469,23 +3517,51 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      checkout: {
-        Args: {
-          p_address_id: string
-          p_company_id?: string
-          p_discount_code?: string
-          p_notes?: string
-          p_payment_method: Database["public"]["Enums"]["payment_method"]
-          p_site_id?: string
-          p_use_wallet?: boolean
+      cancel_order: {
+        Args: { p_order_id: string; p_reason?: string }
+        Returns: {
+          address_id: string | null
+          address_snapshot: Json
+          approved_at: string | null
+          buyer_company_id: string | null
+          buyer_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          commission_amount: number
+          confirmed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          delivery_fee: number
+          discount_total: number
+          grand_total: number
+          id: string
+          notes: string | null
+          order_group_id: string
+          order_number: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          quoted_at: string | null
+          review_due_at: string | null
+          seller_company_id: string
+          site_id: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          updated_at: string
+          wallet_applied: number
         }
-        Returns: string
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       clear_draft_quotation: { Args: never; Returns: Json }
       confirm_payment: { Args: { p_payment_id: string }; Returns: undefined }
       convert_level_for_branches: {
         Args: {
-          p_level_category_id: string | null
+          p_level_category_id: string
           p_mode: string
           p_new_branch_code?: string
           p_new_branch_name_ar?: string
@@ -3569,35 +3645,26 @@ export type Database = {
         }
       }
       issue_draft_quotation: { Args: { p_valid_until?: string }; Returns: Json }
-      issue_quotation: {
-        Args: {
-          p_quotation_id: string
-          p_seller_company_ids: string[]
-          p_valid_until?: string
-        }
-        Returns: {
-          awarded_offer_id: string | null
-          buyer_company_id: string | null
-          buyer_id: string
-          created_at: string
-          id: string
-          issued_at: string | null
-          notes: string | null
-          quotation_number: string
-          site_id: string | null
-          status: Database["public"]["Enums"]["quotation_status"]
-          title: string | null
-          updated_at: string
-          valid_until: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "quotations"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       list_favorite_products: { Args: never; Returns: Json }
+      pay_order: {
+        Args: {
+          p_expected_total: unknown
+          p_order_group_id: string
+          p_use_wallet?: boolean
+        }
+        Returns: string
+      }
+      place_order: {
+        Args: {
+          p_address_id: string
+          p_company_id?: string
+          p_discount_code?: string
+          p_notes?: string
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_site_id?: string
+        }
+        Returns: string
+      }
       preview_checkout: {
         Args: {
           p_address_id?: string
@@ -3608,6 +3675,39 @@ export type Database = {
         Returns: Json
       }
       preview_draft_quotation: { Args: never; Returns: Json }
+      receive_return: {
+        Args: { p_return_id: string }
+        Returns: {
+          attachments: string[]
+          buyer_company_id: string | null
+          buyer_id: string
+          created_at: string
+          id: string
+          order_id: string
+          picked_up_at: string | null
+          reason_code: string | null
+          reason_text: string | null
+          received_at: string | null
+          refund_amount: number
+          refund_method: string | null
+          refunded_at: string | null
+          rejection_reason: string | null
+          requested_at: string
+          return_number: string
+          seller_company_id: string
+          seller_decided_at: string | null
+          status: Database["public"]["Enums"]["return_status"]
+          total_accepted: number
+          total_rejected: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       register_device_token: {
         Args: { p_app_version?: string; p_platform: string; p_token: string }
         Returns: undefined
@@ -3700,6 +3800,430 @@ export type Database = {
           reservation_id: string
         }[]
       }
+      seller_advance_order: {
+        Args: {
+          p_order_id: string
+          p_to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: {
+          address_id: string | null
+          address_snapshot: Json
+          approved_at: string | null
+          buyer_company_id: string | null
+          buyer_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          commission_amount: number
+          confirmed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          delivery_fee: number
+          discount_total: number
+          grand_total: number
+          id: string
+          notes: string | null
+          order_group_id: string
+          order_number: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          quoted_at: string | null
+          review_due_at: string | null
+          seller_company_id: string
+          site_id: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          updated_at: string
+          wallet_applied: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      seller_balance_summary: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: {
+          bank_holder: string
+          bank_iban: string
+          bank_name: string
+          credit_balance: unknown
+          period_sales: unknown
+          returns_credit: unknown
+          total_sales: unknown
+          wallet_balance: unknown
+        }[]
+      }
+      seller_buyer_companies: {
+        Args: {
+          p_exclude?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+        }
+        Returns: {
+          company_code: string
+          id: string
+          name_ar: string
+          total_count: number
+        }[]
+      }
+      seller_credit_list: {
+        Args: { p_search?: string; p_sort?: string }
+        Returns: {
+          buyer_company_id: string
+          company_code: string
+          company_label: string
+          credit_limit: unknown
+          ends_on: string
+          id: string
+          is_active: boolean
+          outstanding: unknown
+          remaining: unknown
+          starts_on: string
+          total_count: number
+        }[]
+      }
+      seller_delete_credit: { Args: { p_id: string }; Returns: undefined }
+      seller_delete_delivery_rule: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      seller_delete_discount_rule: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      seller_delivery_rules_list: {
+        Args: never
+        Returns: {
+          buyer_company_id: string
+          company_code: string
+          company_label: string
+          fee: unknown
+          free_above: unknown
+          governorate: string
+          id: string
+          is_active: boolean
+          kind: string
+          min_order_total: unknown
+        }[]
+      }
+      seller_discount_rules_list: {
+        Args: never
+        Returns: {
+          buyer_company_id: string
+          buyer_type: string
+          company_code: string
+          company_label: string
+          id: string
+          is_active: boolean
+          kind: string
+          max_total: unknown
+          min_total: unknown
+          percent: number
+        }[]
+      }
+      seller_order_detail: {
+        Args: { p_order_id: string }
+        Returns: {
+          address_snapshot: Json
+          buyer_code: string
+          buyer_is_company: boolean
+          buyer_label: string
+          cancel_reason: string
+          created_at: string
+          delivery_fee: unknown
+          discount_total: unknown
+          grand_total: unknown
+          id: string
+          invoice_id: string
+          is_returning: boolean
+          notes: string
+          order_number: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          prior_amount: unknown
+          prior_orders: number
+          prior_qty: number
+          quoted_at: string
+          review_due_at: string
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: unknown
+        }[]
+      }
+      seller_orders_list: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_sort?: string
+        }
+        Returns: {
+          buyer_code: string
+          buyer_label: string
+          created_at: string
+          grand_total: unknown
+          id: string
+          invoice_id: string
+          items_count: number
+          order_number: string
+          review_due_at: string
+          status: Database["public"]["Enums"]["order_status"]
+          total_count: number
+        }[]
+      }
+      seller_quote_order: {
+        Args: { p_delivery_fee?: unknown; p_items: Json; p_order_id: string }
+        Returns: {
+          address_id: string | null
+          address_snapshot: Json
+          approved_at: string | null
+          buyer_company_id: string | null
+          buyer_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          commission_amount: number
+          confirmed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          delivery_fee: number
+          discount_total: number
+          grand_total: number
+          id: string
+          notes: string | null
+          order_group_id: string
+          order_number: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          quoted_at: string | null
+          review_due_at: string | null
+          seller_company_id: string
+          site_id: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          updated_at: string
+          wallet_applied: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      seller_reject_order: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: {
+          address_id: string | null
+          address_snapshot: Json
+          approved_at: string | null
+          buyer_company_id: string | null
+          buyer_id: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          commission_amount: number
+          confirmed_at: string | null
+          created_at: string
+          delivered_at: string | null
+          delivery_fee: number
+          discount_total: number
+          grand_total: number
+          id: string
+          notes: string | null
+          order_group_id: string
+          order_number: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          quoted_at: string | null
+          review_due_at: string | null
+          seller_company_id: string
+          site_id: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          updated_at: string
+          wallet_applied: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      seller_return_detail: {
+        Args: { p_return_id: string }
+        Returns: {
+          buyer_address: string
+          buyer_code: string
+          buyer_email: string
+          buyer_is_company: boolean
+          buyer_label: string
+          buyer_logo_url: string
+          buyer_phone: string
+          buyer_register: string
+          buyer_tax_number: string
+          decided_at: string
+          id: string
+          invoice_issued_at: string
+          invoice_number: string
+          order_id: string
+          order_number: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          placed_at: string
+          reason_code: string
+          reason_label: string
+          reason_text: string
+          refund_amount: unknown
+          refunded_at: string
+          rejection_reason: string
+          requested_at: string
+          return_number: string
+          seller_logo_url: string
+          seller_name: string
+          status: Database["public"]["Enums"]["return_status"]
+          total_accepted: unknown
+          total_rejected: unknown
+        }[]
+      }
+      seller_return_items: {
+        Args: { p_return_id: string }
+        Returns: {
+          discount_share: unknown
+          id: string
+          image_url: string
+          line_value: unknown
+          name_ar: string
+          order_item_id: string
+          qty_accepted: unknown
+          qty_rejected: unknown
+          qty_requested: unknown
+          sku: string
+          unit_ar: string
+          unit_price: unknown
+        }[]
+      }
+      seller_returns_list: {
+        Args: {
+          p_company?: string
+          p_from?: string
+          p_limit?: number
+          p_number?: string
+          p_offset?: number
+          p_scope?: string
+          p_search?: string
+          p_sort?: string
+          p_status?: string
+          p_to?: string
+        }
+        Returns: {
+          buyer_code: string
+          buyer_label: string
+          decided_at: string
+          id: string
+          items_count: number
+          refunded_at: string
+          requested_at: string
+          requested_value: unknown
+          return_number: string
+          status: Database["public"]["Enums"]["return_status"]
+          total_accepted: unknown
+          total_count: number
+        }[]
+      }
+      seller_set_credit: {
+        Args: {
+          p_buyer_company_id: string
+          p_credit_limit: unknown
+          p_ends_on?: string
+          p_id?: string
+          p_starts_on: string
+        }
+        Returns: {
+          buyer_company_id: string
+          created_at: string
+          credit_limit: number
+          ends_on: string | null
+          id: string
+          is_active: boolean
+          seller_company_id: string
+          starts_on: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seller_buyer_credit"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      seller_set_delivery_rule: {
+        Args: {
+          p_buyer_company_id?: string
+          p_fee: unknown
+          p_free_above?: unknown
+          p_governorate?: string
+          p_id?: string
+          p_is_active?: boolean
+          p_kind: string
+          p_min_order_total?: unknown
+        }
+        Returns: {
+          area: string | null
+          buyer_company_id: string | null
+          created_at: string
+          fee: number
+          free_above: number | null
+          governorate: string | null
+          id: string
+          is_active: boolean
+          kind: string
+          min_order_total: number
+          priority: number
+          seller_company_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "delivery_fee_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      seller_set_discount_rule: {
+        Args: {
+          p_buyer_company_id?: string
+          p_buyer_type?: string
+          p_id?: string
+          p_is_active?: boolean
+          p_kind: string
+          p_max_total?: unknown
+          p_min_total?: unknown
+          p_percent: number
+        }
+        Returns: {
+          buyer_company_id: string | null
+          buyer_type: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: string
+          max_total: number | null
+          min_total: number | null
+          percent: number
+          seller_company_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "seller_discount_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_draft_quotation_item_supplier: {
         Args: { p_item_id: string; p_seller_company_id?: string }
         Returns: Json
@@ -3730,6 +4254,8 @@ export type Database = {
         | "not_awarded"
         | "expired"
       order_status:
+        | "awaiting_seller_review"
+        | "quoted"
         | "awaiting_payment"
         | "confirmed"
         | "preparing"
@@ -3932,6 +4458,8 @@ export const Constants = {
         "expired",
       ],
       order_status: [
+        "awaiting_seller_review",
+        "quoted",
         "awaiting_payment",
         "confirmed",
         "preparing",
