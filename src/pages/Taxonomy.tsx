@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, FolderOpen, ImagePlus, Package, Pencil, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { PageHeader, Btn, Field, Input, Select, Toggle, Card, Spinner, EmptyState } from '../components/ui';
+import { ImportProductsModal } from '../components/ImportProductsModal';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 
@@ -140,6 +141,9 @@ function TaxonomyBrowser() {
   const [addingProduct, setAddingProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [converting, setConverting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importDrag, setImportDrag] = useState(false);
 
   const current = path[path.length - 1]!;
   const specialtyCrumb = path.find((c): c is Extract<Crumb, { kind: 'specialty' }> => c.kind === 'specialty');
@@ -422,9 +426,20 @@ function TaxonomyBrowser() {
               </Btn>
             )}
             {canAddProduct && (
-              <Btn variant="accent" onClick={() => setAddingProduct(true)}>
-                + منتج
-              </Btn>
+              <>
+                <Btn
+                  variant="ghost"
+                  onClick={() => {
+                    setImportFile(null);
+                    setImporting(true);
+                  }}
+                >
+                  رفع Excel
+                </Btn>
+                <Btn variant="accent" onClick={() => setAddingProduct(true)}>
+                  + منتج
+                </Btn>
+              </>
             )}
           </div>
         </div>
@@ -498,10 +513,35 @@ function TaxonomyBrowser() {
             )}
 
             {(levelMode === 'products' || levelMode === 'empty') && (
-              <>
+              <div
+                onDragOver={(e) => {
+                  if (!canAddProduct) return;
+                  e.preventDefault();
+                  setImportDrag(true);
+                }}
+                onDragLeave={() => setImportDrag(false)}
+                onDrop={(e) => {
+                  if (!canAddProduct) return;
+                  e.preventDefault();
+                  setImportDrag(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (!file) return;
+                  setImportFile(file);
+                  setImporting(true);
+                }}
+                className={importDrag ? 'bg-accent-soft/40' : undefined}
+              >
                 <SectionTitle title="المنتجات في هذا المستوى" count={products?.length ?? 0} />
                 {!products?.length ? (
-                  <p className="px-4 py-6 text-center text-sm text-subtext">لا توجد منتجات مربوطة بهذا المستوى</p>
+                  <p className="px-4 py-6 text-center text-sm text-subtext">
+                    لا توجد منتجات مربوطة بهذا المستوى
+                    {canAddProduct && (
+                      <>
+                        <br />
+                        <span className="text-xs">أو اسحب ملف Excel هنا لإضافة منتجات لهذا القسم</span>
+                      </>
+                    )}
+                  </p>
                 ) : (
                   <div className="divide-y divide-line">
                     {products.map((p, i) => (
@@ -530,7 +570,7 @@ function TaxonomyBrowser() {
                     ))}
                   </div>
                 )}
-              </>
+              </div>
             )}
           </>
         )}
@@ -550,6 +590,11 @@ function TaxonomyBrowser() {
           specialtyId={specialtyId}
           categoryId={categoryCrumb?.id ?? null}
           product={editingProduct}
+          onImportExcel={!editingProduct ? () => {
+            setAddingProduct(false);
+            setImportFile(null);
+            setImporting(true);
+          } : undefined}
           onClose={() => {
             setAddingProduct(false);
             setEditingProduct(null);
@@ -557,6 +602,28 @@ function TaxonomyBrowser() {
           onDone={() => {
             setAddingProduct(false);
             setEditingProduct(null);
+            qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+            qc.invalidateQueries({ queryKey: ['products'] });
+          }}
+        />
+      )}
+
+      {importing && specialtyId && (
+        <ImportProductsModal
+          open
+          target={{
+            specialtyId,
+            categoryId: categoryCrumb?.id ?? null,
+            label: [specialtyCrumb?.name_ar, categoryCrumb?.name_ar].filter(Boolean).join(' ‹ '),
+          }}
+          initialFile={importFile}
+          onClose={() => {
+            setImporting(false);
+            setImportFile(null);
+          }}
+          onDone={() => {
+            setImporting(false);
+            setImportFile(null);
             qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
             qc.invalidateQueries({ queryKey: ['products'] });
           }}
@@ -921,12 +988,14 @@ function TaxonomyProductModal({
   specialtyId,
   categoryId,
   product,
+  onImportExcel,
   onClose,
   onDone,
 }: {
   specialtyId: string;
   categoryId: string | null;
   product: ProductRow | null;
+  onImportExcel?: () => void;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -1073,6 +1142,11 @@ function TaxonomyProductModal({
           سيُربط المنتج بالتخصص{categoryId ? ' والفرع الحالي' : ' (بدون فئة)'}.
         </p>
         <div className="flex justify-end gap-2">
+          {onImportExcel && (
+            <Btn variant="ghost" onClick={onImportExcel} className="me-auto">
+              رفع من Excel
+            </Btn>
+          )}
           <Btn variant="ghost" onClick={onClose} disabled={save.isPending}>
             إلغاء
           </Btn>

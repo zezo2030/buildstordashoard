@@ -15,30 +15,46 @@ type Lookups = {
   units: { id: string; name_ar: string }[];
 };
 
+export type ImportTarget = {
+  specialtyId: string;
+  categoryId: string | null;
+  label: string;
+};
+
 export function ImportProductsModal({
   open,
   onClose,
   onDone,
+  target,
+  initialFile,
 }: {
   open: boolean;
   onClose: () => void;
   onDone: () => void;
+  target?: ImportTarget;
+  initialFile?: File | null;
 }) {
   const admin = useAdmin();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [specialtyId, setSpecialtyId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
+  const ingestedRef = useRef<File | null>(null);
+  const locked = !!target;
+  const [pickedSpecialtyId, setPickedSpecialtyId] = useState('');
+  const [pickedCategoryId, setPickedCategoryId] = useState('');
   const [unitId, setUnitId] = useState('');
   const [fileName, setFileName] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [plan, setPlan] = useState<ImportPlan | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
+  const specialtyId = target?.specialtyId ?? pickedSpecialtyId;
+  const categoryId = target ? (target.categoryId ?? '') : pickedCategoryId;
+
   const { data: lookups } = useQuery({
     queryKey: ['product-lookups'],
-    enabled: open,
+    enabled: open && !locked,
     queryFn: async (): Promise<Lookups> => {
       const [sp, cat, un] = await Promise.all([
         supabase.from('specialties').select('id, name_ar').order('sort_order'),
@@ -53,14 +69,25 @@ export function ImportProductsModal({
     },
   });
 
+  const { data: units } = useQuery({
+    queryKey: ['units'],
+    enabled: open && locked,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('units').select('id, name_ar').order('code');
+      if (error) throw new Error(arError(error));
+      return data ?? [];
+    },
+  });
+
   useEffect(() => {
     if (open) return;
-    setSpecialtyId('');
-    setCategoryId('');
+    setPickedSpecialtyId('');
+    setPickedCategoryId('');
     setUnitId('');
     setFileName('');
     setParseError(null);
     setParsing(false);
+    setDragOver(false);
     setPlan(null);
     setProgress(null);
     if (fileRef.current) fileRef.current.value = '';
@@ -73,11 +100,14 @@ export function ImportProductsModal({
   const cats = (lookups?.categories ?? []).filter(
     (c) => (!specialtyId || c.specialty_id === specialtyId) && !parentIds.has(c.id),
   );
+  const unitOptions = locked ? (units ?? []) : (lookups?.units ?? []);
 
-  async function onPickFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+  async function ingestFile(file: File) {
+    if (!isXlsxFile(file)) {
+      setParseError('ارفع ملف Excel بصيغة xlsx مطابق للنموذج');
+      setPlan(null);
+      return;
+    }
     setFileName(file.name);
     setParseError(null);
     setPlan(null);
@@ -94,10 +124,28 @@ export function ImportProductsModal({
     }
   }
 
+  useEffect(() => {
+    if (!open) {
+      ingestedRef.current = null;
+      return;
+    }
+    if (!initialFile || ingestedRef.current === initialFile) return;
+    ingestedRef.current = initialFile;
+    void ingestFile(initialFile);
+  }, [open, initialFile]);
+
+  async function onPickFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    await ingestFile(file);
+  }
+
   const importRows = useMutation({
     mutationFn: async () => {
       if (!plan) throw new Error('اختر ملف Excel أولاً');
-      if (!specialtyId || !unitId) throw new Error('اختر التخصص والوحدة');
+      if (!specialtyId) throw new Error('التخصص غير محدد');
+      if (!unitId) throw new Error('اختر الوحدة');
       await assertLeafCategory(specialtyId, categoryId || null);
       const rows = plan.toInsert;
       if (rows.length === 0) throw new Error('لا توجد منتجات جديدة للإضافة');
@@ -144,38 +192,56 @@ export function ImportProductsModal({
         <p className="text-sm text-subtext">
           نفس نموذج الشيت: Product Name, Made In, Code, Description, Image. أعمدة Shop تُتجاهل، والـ SKU الموجود مسبقاً لا يُضاف.
         </p>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="التخصص">
-            <Select
-              value={specialtyId}
-              onChange={(e) => {
-                setSpecialtyId(e.target.value);
-                setCategoryId('');
-              }}
-            >
-              <option value="">اختر…</option>
-              {(lookups?.specialties ?? []).map((s) => (
-                <option key={s.id} value={s.id}>{s.name_ar}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="الفئة" hint="آخر فرع فقط (مش قسم فيه فروع)">
-            <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">بدون فئة</option>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>{c.name_ar}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="الوحدة">
-            <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-              <option value="">اختر…</option>
-              {(lookups?.units ?? []).map((u) => (
-                <option key={u.id} value={u.id}>{u.name_ar}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+        {locked ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="سيُضاف في">
+              <div className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-primary">
+                {target?.label}
+              </div>
+            </Field>
+            <Field label="الوحدة">
+              <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                <option value="">اختر…</option>
+                {unitOptions.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name_ar}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="التخصص">
+              <Select
+                value={pickedSpecialtyId}
+                onChange={(e) => {
+                  setPickedSpecialtyId(e.target.value);
+                  setPickedCategoryId('');
+                }}
+              >
+                <option value="">اختر…</option>
+                {(lookups?.specialties ?? []).map((s) => (
+                  <option key={s.id} value={s.id}>{s.name_ar}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="الفئة" hint="آخر فرع فقط (مش قسم فيه فروع)">
+              <Select value={pickedCategoryId} onChange={(e) => setPickedCategoryId(e.target.value)}>
+                <option value="">بدون فئة</option>
+                {cats.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name_ar}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="الوحدة">
+              <Select value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                <option value="">اختر…</option>
+                {unitOptions.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name_ar}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        )}
         <Field label="ملف Excel">
           <input
             ref={fileRef}
@@ -184,13 +250,27 @@ export function ImportProductsModal({
             className="hidden"
             onChange={onPickFile}
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <Btn variant="ghost" busy={parsing} onClick={() => fileRef.current?.click()}>
-              <FileSpreadsheet size={16} />
-              اختيار ملف
-            </Btn>
-            <span className="text-sm text-subtext">{fileName || 'لم يُختر ملف بعد'}</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const file = e.dataTransfer.files[0];
+              if (file) void ingestFile(file);
+            }}
+            className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-6 text-sm transition-colors ${
+              dragOver ? 'border-accent bg-accent-soft text-primary' : 'border-line bg-surface text-subtext hover:border-accent hover:text-primary'
+            }`}
+          >
+            <FileSpreadsheet size={22} />
+            <span>{parsing ? 'جارٍ قراءة الملف…' : fileName || 'اسحب ملف Excel هنا أو اضغط للاختيار'}</span>
+          </button>
         </Field>
         {parseError && <p className="text-sm text-danger">{parseError}</p>}
         {plan && (
@@ -225,7 +305,7 @@ export function ImportProductsModal({
           <Btn
             variant="accent"
             busy={importRows.isPending}
-            disabled={!plan || plan.toInsert.length === 0}
+            disabled={parsing || !plan || plan.toInsert.length === 0}
             onClick={() => importRows.mutate()}
           >
             تأكيد الرفع
@@ -264,6 +344,11 @@ function PreviewRow({ row }: { row: ParsedProductRow }) {
       <div className="text-xs text-subtext">{row.originCountry ?? '—'}</div>
     </div>
   );
+}
+
+function isXlsxFile(file: File): boolean {
+  const name = file.name.toLowerCase();
+  return name.endsWith('.xlsx') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }
 
 async function fetchExistingSkus(skus: string[]): Promise<Set<string>> {
