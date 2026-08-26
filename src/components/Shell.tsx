@@ -3,8 +3,8 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Store, Building2, UserRound, Package, ClipboardList, ImageIcon, ShoppingCart,
-  ReceiptText, FileSpreadsheet, Undo2, Wallet, Banknote, BadgePercent, Truck,
-  CreditCard, Headset, Bell, Settings, ScrollText, LogOut, ChevronLeft,
+  ReceiptText, FileSpreadsheet, Undo2, Wallet, Headset, Bell, Settings, ScrollText, LogOut,
+  ChevronLeft,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { materialsBadgeCount } from '../lib/materials-requests';
@@ -15,16 +15,14 @@ function useBadges() {
     queryKey: ['nav-badges'],
     refetchInterval: 60_000,
     queryFn: async () => {
-      const [sellers, withdrawals, tickets, requests, submissions] = await Promise.all([
+      const [sellers, tickets, requests, submissions] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'seller').eq('status', 'pending'),
-        supabase.from('withdrawal_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('support_tickets').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
         supabase.from('product_requests').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('product_submissions').select('*', { count: 'exact', head: true }).eq('status', 'open'),
       ]);
       return {
         sellers: sellers.count ?? 0,
-        withdrawals: withdrawals.count ?? 0,
         tickets: tickets.count ?? 0,
         requests: requests.count ?? 0,
         submissions: submissions.count ?? 0,
@@ -113,10 +111,6 @@ export function Shell() {
       title: 'المال',
       items: [
         { to: '/wallets', label: 'المحافظ', icon: <Wallet size={17} strokeWidth={1.75} /> },
-        { to: '/withdrawals', label: 'طلبات السحب', icon: <Banknote size={17} strokeWidth={1.75} />, badge: badges?.withdrawals },
-        { to: '/credit', label: 'الكريديت', icon: <CreditCard size={17} strokeWidth={1.75} /> },
-        { to: '/discounts', label: 'الخصومات', icon: <BadgePercent size={17} strokeWidth={1.75} /> },
-        { to: '/delivery-fees', label: 'رسوم التوصيل', icon: <Truck size={17} strokeWidth={1.75} /> },
       ],
     },
     {

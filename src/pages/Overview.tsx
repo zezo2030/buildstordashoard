@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { PackagePlus, Banknote, Headset, FileSpreadsheet, Users, Building2, Store, Package, ShoppingCart, Wallet, ArrowUpLeft } from 'lucide-react';
+import { PackagePlus, Headset, FileSpreadsheet, Users, Building2, Store, Package, ShoppingCart, Wallet, ArrowUpLeft } from 'lucide-react';
 import { fetchOverviewCounts, fetchSalesRange } from '../api/stats';
 import { supabase, arError } from '../lib/supabase';
 import { KpiCard, PageHeader, Spinner, ErrorState, Money } from '../components/ui';
@@ -53,7 +53,6 @@ export default function Overview() {
   const alerts = [
     { to: '/requests/materials?tab=sellers', label: 'اقتراح منتج من بائع', count: openSubmissions.data ?? 0, icon: <PackagePlus size={18} /> },
     { to: '/requests/materials', label: 'طلب مادة من مشترٍ', count: d.openProductRequests, icon: <FileSpreadsheet size={18} /> },
-    { to: '/withdrawals', label: 'طلب سحب معلق', count: d.pendingWithdrawals, icon: <Banknote size={18} /> },
     { to: '/support', label: 'تذكرة دعم مفتوحة', count: d.openTickets, icon: <Headset size={18} /> },
   ].filter((a) => a.count > 0);
 

@@ -20,10 +20,6 @@ import OrderDetail from './pages/OrderDetail';
 import Invoices from './pages/Invoices';
 import Returns from './pages/Returns';
 import Wallets from './pages/Wallets';
-import Withdrawals from './pages/Withdrawals';
-import Credit from './pages/Credit';
-import Discounts from './pages/Discounts';
-import DeliveryFees from './pages/DeliveryFees';
 import Support from './pages/Support';
 import NotificationsPage from './pages/Notifications';
 import SettingsPage from './pages/Settings';
@@ -79,10 +75,10 @@ export default function App() {
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/returns" element={<Returns />} />
               <Route path="/wallets" element={<Wallets />} />
-              <Route path="/withdrawals" element={<Withdrawals />} />
-              <Route path="/credit" element={<Credit />} />
-              <Route path="/discounts" element={<Discounts />} />
-              <Route path="/delivery-fees" element={<DeliveryFees />} />
+              <Route path="/withdrawals" element={<Navigate to="/wallets" replace />} />
+              <Route path="/credit" element={<Navigate to="/" replace />} />
+              <Route path="/discounts" element={<Navigate to="/" replace />} />
+              <Route path="/delivery-fees" element={<Navigate to="/" replace />} />
               <Route path="/support" element={<Support />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/settings" element={<SettingsPage />} />

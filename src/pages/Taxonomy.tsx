@@ -364,12 +364,9 @@ function TaxonomyBrowser() {
                   onClick={() => enterSpecialty(s)}
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-start"
                 >
-                  <Thumb url={s.image_url} tone="accent" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-primary">{s.name_ar}</span>
-                    <span className="block text-xs text-subtext" dir="ltr">
-                      {s.code}
-                    </span>
+                  <TaxonomyTile url={s.image_url} label={s.name_ar} />
+                  <span className="min-w-0 flex-1 text-xs text-subtext" dir="ltr">
+                    {s.code}
                   </span>
                   <ChevronLeft size={16} className="shrink-0 text-subtext" />
                 </button>
@@ -518,14 +515,9 @@ function TaxonomyBrowser() {
                           onClick={() => enterCategory(c)}
                           className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-start"
                         >
-                          <Thumb url={c.image_url} tone="navy" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium text-primary">{c.name_ar}</span>
-                            {c.code && (
-                              <span className="block text-xs text-subtext" dir="ltr">
-                                {c.code}
-                              </span>
-                            )}
+                          <TaxonomyTile url={c.image_url} label={c.name_ar} />
+                          <span className="min-w-0 flex-1 text-xs text-subtext" dir="ltr">
+                            {c.code || '—'}
                           </span>
                           <ChevronLeft size={16} className="shrink-0 text-subtext" />
                         </button>
@@ -734,7 +726,7 @@ function Thumb({
   empty?: 'folder' | 'package';
 }) {
   if (url) {
-    return <img src={url} alt="" className="size-9 shrink-0 rounded-xl object-cover ring-1 ring-line" />;
+    return <img src={url} alt="" className="size-9 shrink-0 rounded-xl object-contain ring-1 ring-line" />;
   }
   return (
     <span
@@ -747,14 +739,34 @@ function Thumb({
   );
 }
 
+/** بلاطة التخصص/الفرع زي الموبايل: الصورة كاملة بدون قص، والاسم في شريط كحلي لوحده. */
+function TaxonomyTile({ url, label }: { url: string | null; label: string }) {
+  return (
+    <span className="flex size-24 shrink-0 flex-col overflow-hidden rounded-lg bg-white ring-1 ring-black/10">
+      <span className="flex min-h-0 flex-1 items-center justify-center bg-white p-0.5">
+        {url ? (
+          <img src={url} alt="" className="max-h-full max-w-full object-contain" />
+        ) : (
+          <FolderOpen size={22} className="text-subtext" />
+        )}
+      </span>
+      <span className="flex h-[23%] items-center justify-center bg-navy px-1">
+        <span className="truncate text-[10px] font-bold leading-none text-white">{label || '—'}</span>
+      </span>
+    </span>
+  );
+}
+
 function ImagePicker({
   value,
   folder,
   onChange,
+  label,
 }: {
   value: string;
   folder: string;
   onChange: (url: string) => void;
+  label?: string;
 }) {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -779,14 +791,8 @@ function ImagePicker({
   return (
     <Field label="الصورة">
       <div className="flex items-start gap-3">
-        <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line">
-          {value ? (
-            <img src={value} alt="" className="size-full object-cover" />
-          ) : (
-            <div className="grid size-full place-items-center text-subtext">
-              <ImagePlus size={22} />
-            </div>
-          )}
+        <div className="relative shrink-0">
+          <TaxonomyTile url={value || null} label={label ?? ''} />
           {value && (
             <button
               type="button"
@@ -809,7 +815,9 @@ function ImagePicker({
             value={value}
             onChange={(e) => onChange(e.target.value)}
           />
-          <p className="text-[11px] text-subtext">JPEG / PNG / WebP — حتى 5 ميجابايت</p>
+          <p className="text-[11px] text-subtext">
+            ارفع صورة بدون اسم — الاسم يظهر في الشريط الكحلي. JPEG / PNG / WebP — حتى 5 ميجابايت
+          </p>
         </div>
       </div>
     </Field>
@@ -844,6 +852,7 @@ function SpecialtyModal({
         <ImagePicker
           value={editing.image_url}
           folder="specialties"
+          label={editing.name_ar}
           onChange={(image_url) => setEditing({ ...editing, image_url })}
         />
         <Field label="الاسم (عربي)">
@@ -892,6 +901,7 @@ function CategoryModal({
         <ImagePicker
           value={editing.image_url}
           folder="categories"
+          label={editing.name_ar}
           onChange={(image_url) => setEditing({ ...editing, image_url })}
         />
         <Field label="الاسم (عربي)">
