@@ -3,10 +3,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import {
-  Banknote, Headset, FileSpreadsheet, Users, Building2, Store, Package, ShoppingCart, Wallet, ArrowUpLeft,
-} from 'lucide-react';
+import { PackagePlus, Banknote, Headset, FileSpreadsheet, Users, Building2, Store, Package, ShoppingCart, Wallet, ArrowUpLeft } from 'lucide-react';
 import { fetchOverviewCounts, fetchSalesRange } from '../api/stats';
+import { supabase, arError } from '../lib/supabase';
 import { KpiCard, PageHeader, Spinner, ErrorState, Money } from '../components/ui';
 import { DateRangePicker, todayISO, type DateRange } from '../components/DateRangePicker';
 import SalesChartCard from '../components/overview/SalesChartCard';
@@ -27,6 +26,19 @@ export default function Overview() {
     queryFn: () => fetchSalesRange(salesRange.from, salesRange.to),
   });
 
+  const openSubmissions = useQuery({
+    queryKey: ['overview-open-submissions'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('product_submissions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'open');
+      if (error) throw new Error(arError(error));
+      return count ?? 0;
+    },
+    refetchInterval: 120_000,
+  });
+
   if (counts.isLoading) return <Spinner label="جارٍ تحميل المؤشرات…" />;
   if (counts.error || !counts.data)
     return (
@@ -39,7 +51,8 @@ export default function Overview() {
   const d = counts.data;
 
   const alerts = [
-    { to: '/requests/materials', label: 'طلب إضافة مادة من البائعين', count: d.openProductRequests, icon: <FileSpreadsheet size={18} /> },
+    { to: '/requests/materials?tab=sellers', label: 'اقتراح منتج من بائع', count: openSubmissions.data ?? 0, icon: <PackagePlus size={18} /> },
+    { to: '/requests/materials', label: 'طلب مادة من مشترٍ', count: d.openProductRequests, icon: <FileSpreadsheet size={18} /> },
     { to: '/withdrawals', label: 'طلب سحب معلق', count: d.pendingWithdrawals, icon: <Banknote size={18} /> },
     { to: '/support', label: 'تذكرة دعم مفتوحة', count: d.openTickets, icon: <Headset size={18} /> },
   ].filter((a) => a.count > 0);

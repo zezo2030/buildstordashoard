@@ -1,8 +1,8 @@
-// طلبات المنتجات — طلبات إضافة SKU جديد من المستخدمين، بمعالجة أدمن (قبول/رفض + ملاحظة).
+// طلبات المواد — تابين على نفس الصفحة: طلب المشتري (جدول) واقتراح البائع
+// (كروت + لوحة تفاصيل بكل أقسام الفورم). مش نفس الشكل عن قصد.
 //
-// الصفحة دي بقت **لطلب المشتري بس**: «طلب منتج بمواصفات خاصة» — اسم مادة +
-// كمية + شركة مستهدفة + PDF. اقتراحات البائع اتنقلت لجدولها ولصفحتها
-// (`product_submissions` و`ProductSubmissions.tsx`) بنموذج منتج كامل.
+// طلب المشتري يفضل على `product_requests`. اقتراح البائع من
+// `product_submissions` عبر `SellerSubmissionsPanel`.
 //
 // عمود الموضوع لسه بيرجع للقسم لما الاسم يبقى فاضي — صفوف البائع القديمة
 // (قسم من غير `name_ar`) لسه في الجدول ولازم تفضل بتترسم.
@@ -10,6 +10,7 @@
 // القرار بيمشي على `admin_decide_product_request` مش `update` مباشر: الحالة لازم
 // تكون من قيم قيد الجدول، والدالة كمان بتبعت إشعار للطالب.
 import { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Paperclip } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
@@ -19,6 +20,8 @@ import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { fmtDateTime } from '../lib/format';
 import { productRequestStatusLabels, labelOf } from '../lib/labels';
+import { materialsTabFromSearch } from '../lib/materials-requests';
+import { SellerSubmissionsPanel } from './SellerSubmissionsPanel';
 
 const REQUEST_DOCS_BUCKET = 'request-docs';
 
@@ -64,6 +67,7 @@ function subjectOf(r: Row) {
 const DECIDABLE = ['open', 'in_review'];
 
 export default function ProductRequests() {
+  const tab = materialsTabFromSearch(useLocation().search);
   const qc = useQueryClient();
   const { toast } = useToast();
   const [page, setPage] = useState(0);
@@ -72,6 +76,7 @@ export default function ProductRequests() {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['product-requests', status, page],
+    enabled: tab === 'buyers',
     queryFn: async () => {
       let q = supabase
         .from('product_requests')
@@ -181,9 +186,11 @@ export default function ProductRequests() {
   return (
     <div>
       <PageHeader
-        title="طلبات المنتجات"
-        subtitle="طلبات إضافة مواد جديدة للكتالوج من البائعين والمشترين"
-        actions={
+        title="طلبات المواد"
+        subtitle={tab === 'sellers'
+          ? 'اقتراحات البائعين لإضافة منتج للكتالوج — كل حقول الفورم'
+          : 'طلبات المشترين لإضافة مادة بمواصفات خاصة'}
+        actions={tab === 'buyers' ? (
           <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-40">
             <option value="open">المفتوحة</option>
             <option value="in_review">قيد المراجعة</option>
@@ -191,29 +198,52 @@ export default function ProductRequests() {
             <option value="rejected">المرفوضة</option>
             <option value="all">الكل</option>
           </Select>
-        }
+        ) : undefined}
       />
-      <DataTable
-        columns={columns}
-        rows={rows}
-        loading={isLoading}
-        error={error ? (error as Error).message : null}
-        onRetry={() => refetch()}
-        page={page}
-        hasMore={(data?.length ?? 0) > PAGE_SIZE}
-        onPage={setPage}
-        emptyTitle="لا توجد طلبات"
-      />
-      {deciding && (
-        <DecideModal
-          row={deciding.row}
-          to={deciding.to}
-          busy={decide.isPending}
-          onClose={() => setDeciding(null)}
-          onSubmit={(note) => decide.mutate({ id: deciding.row.id, to: deciding.to, note })}
-        />
+
+      <div className="mb-4 flex w-fit gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-line">
+        <TabLink to="/requests/materials" active={tab === 'buyers'} label="طلبات المشترين" />
+        <TabLink to="/requests/materials?tab=sellers" active={tab === 'sellers'} label="اقتراحات البائعين" />
+      </div>
+
+      {tab === 'sellers' ? <SellerSubmissionsPanel /> : (
+        <>
+          <DataTable
+            columns={columns}
+            rows={rows}
+            loading={isLoading}
+            error={error ? (error as Error).message : null}
+            onRetry={() => refetch()}
+            page={page}
+            hasMore={(data?.length ?? 0) > PAGE_SIZE}
+            onPage={setPage}
+            emptyTitle="لا توجد طلبات"
+          />
+          {deciding && (
+            <DecideModal
+              row={deciding.row}
+              to={deciding.to}
+              busy={decide.isPending}
+              onClose={() => setDeciding(null)}
+              onSubmit={(note) => decide.mutate({ id: deciding.row.id, to: deciding.to, note })}
+            />
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+function TabLink({ to, active, label }: { to: string; active: boolean; label: string }) {
+  return (
+    <Link
+      to={to}
+      className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+        active ? 'bg-primary text-white' : 'text-subtext hover:text-primary'
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
 

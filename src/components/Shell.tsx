@@ -2,11 +2,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  LayoutDashboard, Store, Building2, UserRound, Package, PackagePlus, ClipboardList, ImageIcon, ShoppingCart,
+  LayoutDashboard, Store, Building2, UserRound, Package, ClipboardList, ImageIcon, ShoppingCart,
   ReceiptText, FileSpreadsheet, Undo2, Wallet, Banknote, BadgePercent, Truck,
   CreditCard, Headset, Bell, Settings, ScrollText, LogOut, ChevronLeft,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { materialsBadgeCount } from '../lib/materials-requests';
 import { useAdmin } from './Guard';
 
 function useBadges() {
@@ -86,7 +87,7 @@ export function Shell() {
     {
       title: 'الحسابات',
       items: [
-        { to: '/requests/materials', label: 'طلبات المواد', icon: <FileSpreadsheet size={17} strokeWidth={1.75} />, badge: badges?.requests },
+        { to: '/requests/materials', label: 'طلبات المواد', icon: <FileSpreadsheet size={17} strokeWidth={1.75} />, badge: materialsBadgeCount(badges?.requests ?? 0, badges?.submissions ?? 0) },
         { to: '/accounts/individuals', label: 'مشتري فرد', icon: <UserRound size={17} strokeWidth={1.75} /> },
         { to: '/accounts/companies', label: 'مشتري شركة', icon: <Building2 size={17} strokeWidth={1.75} /> },
         { to: '/accounts/sellers', label: 'البائعون', icon: <Store size={17} strokeWidth={1.75} />, badge: badges?.sellers },
@@ -96,7 +97,6 @@ export function Shell() {
       title: 'الكتالوج',
       items: [
         { to: '/catalog/products', label: 'المنتجات', icon: <Package size={17} strokeWidth={1.75} /> },
-        { to: '/catalog/submissions', label: 'منتجات مقترحة', icon: <PackagePlus size={17} strokeWidth={1.75} />, badge: badges?.submissions },
         { to: '/catalog/taxonomy', label: 'التخصصات والفئات', icon: <ClipboardList size={17} strokeWidth={1.75} /> },
         { to: '/catalog/banners', label: 'بانرات الرئيسية', icon: <ImageIcon size={17} strokeWidth={1.75} /> },
       ],
