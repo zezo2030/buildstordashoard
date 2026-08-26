@@ -2,13 +2,14 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, ImagePlus, PackagePlus, Trash2 } from 'lucide-react';
+import { ArrowRight, FileSpreadsheet, ImagePlus, PackagePlus, Trash2 } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import {
   PageHeader, Btn, Card, Field, Input, Money, Select, Spinner, ErrorState, Toggle,
 } from '../components/ui';
 import { DataTable, type Column } from '../components/DataTable';
 import { Modal, ConfirmDialog } from '../components/Modal';
+import { LinkCompanyProductsModal } from '../components/LinkCompanyProductsModal';
 import { useToast } from '../components/Toast';
 
 type Tab = 'list' | 'add';
@@ -67,6 +68,7 @@ const defaultBulk = (): OfferForm => ({
 export default function CompanyMaterials() {
   const { id: companyId } = useParams<{ id: string }>();
   const [tab, setTab] = useState<Tab>('list');
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const { data: company, isLoading, error, refetch } = useQuery({
     queryKey: ['company-materials-meta', companyId],
@@ -92,12 +94,18 @@ export default function CompanyMaterials() {
         title={`مواد — ${company.name_ar}`}
         subtitle="عرض وتعديل مواد الشركة أو إضافة مواد جديدة دفعة واحدة"
         actions={
-          <Link
-            to={`/companies/${companyId}`}
-            className="flex items-center gap-1 text-sm text-subtext hover:text-primary"
-          >
-            <ArrowRight size={15} /> رجوع لتفاصيل الشركة
-          </Link>
+          <>
+            <Btn variant="ghost" onClick={() => setLinkOpen(true)}>
+              <FileSpreadsheet size={16} />
+              ربط من Excel
+            </Btn>
+            <Link
+              to={`/companies/${companyId}`}
+              className="flex items-center gap-1 text-sm text-subtext hover:text-primary"
+            >
+              <ArrowRight size={15} /> رجوع لتفاصيل الشركة
+            </Link>
+          </>
         }
       />
 
@@ -110,6 +118,16 @@ export default function CompanyMaterials() {
         <MaterialsListTab companyId={company.id} companyName={company.name_ar} />
       ) : (
         <MaterialsBulkAddTab companyId={company.id} onAdded={() => setTab('list')} />
+      )}
+
+      {linkOpen && (
+        <LinkCompanyProductsModal
+          open
+          companyId={company.id}
+          companyName={company.name_ar}
+          onClose={() => setLinkOpen(false)}
+          onDone={() => setLinkOpen(false)}
+        />
       )}
     </div>
   );

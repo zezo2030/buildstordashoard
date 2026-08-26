@@ -14,6 +14,7 @@ import Products from './pages/Products';
 import Taxonomy from './pages/Taxonomy';
 import Banners from './pages/Banners';
 import ProductRequests from './pages/ProductRequests';
+import ProductSubmissions from './pages/ProductSubmissions';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import Invoices from './pages/Invoices';
@@ -72,6 +73,7 @@ export default function App() {
               <Route path="/catalog/taxonomy" element={<Taxonomy />} />
               <Route path="/catalog/banners" element={<Banners />} />
               <Route path="/requests/materials" element={<ProductRequests />} />
+              <Route path="/catalog/submissions" element={<ProductSubmissions />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/:id" element={<OrderDetail />} />
               <Route path="/invoices" element={<Invoices />} />

@@ -2,11 +2,13 @@
 // التخصصات الفرعية = جدول categories (parent_id) للحفاظ على توافق الموبايل.
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, FolderOpen, ImagePlus, Package, Pencil, X } from 'lucide-react';
+import { ChevronLeft, FolderOpen, ImagePlus, Package, Pencil, Trash2, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
+import { deleteCatalogProduct } from '../lib/catalog-product-delete';
+import { skuFromSourceCode } from '../lib/catalog-sku';
 import { PageHeader, Btn, Field, Input, Select, Toggle, Card, Spinner, EmptyState } from '../components/ui';
 import { ImportProductsModal } from '../components/ImportProductsModal';
-import { Modal } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 
 type Tab = 'tree' | 'units';
@@ -34,6 +36,7 @@ type Category = {
 type ProductRow = {
   id: string;
   sku: string;
+  source_code: string | null;
   name_ar: string;
   brand: string | null;
   images: string[];
@@ -141,6 +144,7 @@ function TaxonomyBrowser() {
   const [addingProduct, setAddingProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [converting, setConverting] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState<ProductRow | null>(null);
   const [importing, setImporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importDrag, setImportDrag] = useState(false);
@@ -182,7 +186,7 @@ function TaxonomyBrowser() {
     queryFn: async () => {
       let q = supabase
         .from('products')
-        .select('id, sku, name_ar, brand, images, is_active, unit_id, unit:units (name_ar)')
+        .select('id, sku, source_code, name_ar, brand, images, is_active, unit_id, unit:units (name_ar)')
         .eq('specialty_id', specialtyId!)
         .eq('is_active', true)
         .order('name_ar');
@@ -283,6 +287,43 @@ function TaxonomyBrowser() {
       if (error) throw new Error(arError(error));
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  const removeProduct = useMutation({
+    mutationFn: async (p: ProductRow) => {
+      await deleteCatalogProduct(
+        {
+          countSellerOffers: async (productId) => {
+            const { count, error } = await supabase
+              .from('seller_products')
+              .select('id', { count: 'exact', head: true })
+              .eq('product_id', productId);
+            if (error) throw new Error(arError(error));
+            return count ?? 0;
+          },
+          countQuotationItems: async (productId) => {
+            const { count, error } = await supabase
+              .from('quotation_items')
+              .select('id', { count: 'exact', head: true })
+              .eq('product_id', productId);
+            if (error) throw new Error(arError(error));
+            return count ?? 0;
+          },
+          deleteProduct: async (productId) => {
+            const { error } = await supabase.from('products').delete().eq('id', productId);
+            if (error) throw new Error(arError(error));
+          },
+        },
+        p.id,
+      );
+    },
+    onSuccess: () => {
+      toast('success', 'تم حذف المنتج');
+      setDeletingProduct(null);
       qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
       qc.invalidateQueries({ queryKey: ['products'] });
     },
@@ -566,6 +607,14 @@ function TaxonomyBrowser() {
                         >
                           <Pencil size={15} />
                         </button>
+                        <button
+                          type="button"
+                          className="rounded-lg p-2 text-danger hover:bg-red-50"
+                          onClick={() => setDeletingProduct(p)}
+                          title="حذف المنتج"
+                        >
+                          <Trash2 size={15} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -656,6 +705,21 @@ function TaxonomyBrowser() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deletingProduct}
+        title="حذف المنتج"
+        message={
+          deletingProduct
+            ? `سيتم حذف «${deletingProduct.name_ar}» نهائيًا. متابعة؟`
+            : null
+        }
+        confirmLabel="حذف"
+        danger
+        busy={removeProduct.isPending}
+        onConfirm={() => deletingProduct && removeProduct.mutate(deletingProduct)}
+        onClose={() => setDeletingProduct(null)}
+      />
     </div>
   );
 }
@@ -1003,13 +1067,15 @@ function TaxonomyProductModal({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    sku: product?.sku ?? '',
+    source_code: product?.source_code ?? '',
     name_ar: product?.name_ar ?? '',
     unit_id: product?.unit_id ?? '',
     brand: product?.brand ?? '',
     image_url: product?.images?.[0] ?? '',
     is_active: product?.is_active ?? true,
   });
+  const generatedSku = form.source_code.trim() ? skuFromSourceCode(form.source_code) : '';
+  const displaySku = product?.sku || generatedSku;
 
   const { data: units } = useQuery({
     queryKey: ['units'],
@@ -1038,7 +1104,8 @@ function TaxonomyProductModal({
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!form.sku.trim() || !form.name_ar.trim()) throw new Error('SKU والاسم مطلوبان');
+      if (!form.name_ar.trim()) throw new Error('الاسم مطلوب');
+      if (!product && !form.source_code.trim()) throw new Error('الكود مطلوب');
       if (!form.unit_id) throw new Error('اختر وحدة القياس');
       if (!product) {
         let branchQ = supabase
@@ -1053,7 +1120,8 @@ function TaxonomyProductModal({
         }
       }
       const payload = {
-        sku: form.sku.trim(),
+        sku: product?.sku ?? skuFromSourceCode(form.source_code),
+        source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
         brand: form.brand.trim() || null,
         specialty_id: specialtyId,
@@ -1110,13 +1178,20 @@ function TaxonomyProductModal({
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="SKU">
-            <Input dir="ltr" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+          <Field label="الكود" hint="كودك الخاص من الإكسل — لا يظهر في التطبيق">
+            <Input
+              dir="ltr"
+              value={form.source_code}
+              onChange={(e) => setForm({ ...form, source_code: e.target.value })}
+            />
           </Field>
-          <Field label="الاسم (عربي)">
-            <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
+          <Field label="SKU" hint="يتولد تلقائيًا ويظهر في التطبيق">
+            <Input dir="ltr" value={displaySku} readOnly className="bg-surface" />
           </Field>
         </div>
+        <Field label="الاسم (عربي)">
+          <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="وحدة القياس">
             <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>

@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { skuFromSourceCode } from './catalog-sku';
 import { parseProductXlsx, planProductImport, type ParsedProductRow } from './product-xlsx';
 
 const milstonExport = resolve(
@@ -19,7 +20,7 @@ function row(partial: Partial<ParsedProductRow> & Pick<ParsedProductRow, 'rowNum
 }
 
 describe('planProductImport', () => {
-  it('queues new SKUs and skips ones already in the catalog', () => {
+  it('generates a public SKU from the Excel code and skips codes already in the catalog', () => {
     const plan = planProductImport(
       [
         row({ rowNumber: 2, nameAr: 'ازميل 10', sku: '54010111', originCountry: 'CHN' }),
@@ -27,12 +28,27 @@ describe('planProductImport', () => {
       ],
       new Set(['54010111']),
     );
-    expect(plan.toInsert.map((r) => r.sku)).toEqual(['54010112']);
-    expect(plan.skippedDuplicate.map((r) => r.sku)).toEqual(['54010111']);
+    expect(plan.toInsert).toEqual([
+      expect.objectContaining({
+        sourceCode: '54010112',
+        sku: skuFromSourceCode('54010112'),
+        nameAr: 'ازميل 12',
+      }),
+    ]);
+    expect(plan.skippedDuplicate.map((r) => r.sourceCode)).toEqual(['54010111']);
     expect(plan.skippedInvalid).toEqual([]);
   });
 
-  it('skips a second copy of the same SKU inside the file', () => {
+  it('skips a code whose generated SKU is already in the catalog', () => {
+    const plan = planProductImport(
+      [row({ rowNumber: 2, nameAr: 'ازميل 10', sku: '54010111' })],
+      new Set([skuFromSourceCode('54010111')]),
+    );
+    expect(plan.toInsert).toEqual([]);
+    expect(plan.skippedDuplicate.map((r) => r.sourceCode)).toEqual(['54010111']);
+  });
+
+  it('skips a second copy of the same code inside the file', () => {
     const plan = planProductImport(
       [
         row({ rowNumber: 2, nameAr: 'A', sku: '54010111' }),
@@ -40,7 +56,8 @@ describe('planProductImport', () => {
       ],
       new Set(),
     );
-    expect(plan.toInsert.map((r) => r.sku)).toEqual(['54010111']);
+    expect(plan.toInsert.map((r) => r.sourceCode)).toEqual(['54010111']);
+    expect(plan.toInsert[0]?.sku).toBe(skuFromSourceCode('54010111'));
     expect(plan.skippedDuplicate.map((r) => r.rowNumber)).toEqual([3]);
   });
 
@@ -53,7 +70,8 @@ describe('planProductImport', () => {
       ],
       new Set(),
     );
-    expect(plan.toInsert.map((r) => r.sku)).toEqual(['54010603']);
+    expect(plan.toInsert.map((r) => r.sourceCode)).toEqual(['54010603']);
+    expect(plan.toInsert[0]?.sku).toBe(skuFromSourceCode('54010603'));
     expect(plan.skippedInvalid).toEqual([
       { rowNumber: 2, reason: 'missing_name' },
       { rowNumber: 3, reason: 'missing_sku' },

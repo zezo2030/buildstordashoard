@@ -17,6 +17,7 @@ import { SuspendDialog } from './SuspendDialog';
 import { CommissionCell } from './CommissionCell';
 import { PendingSellersStrip } from './PendingSellersStrip';
 import { AddSellerModal } from './AddSellerModal';
+import { AddBuyerModal } from './AddBuyerModal';
 
 const META: Record<AccountKind, { title: string; subtitle: string; empty: string }> = {
   individual: {
@@ -47,6 +48,7 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
   const [page, setPage] = useState(0);
   const [pwdFor, setPwdFor] = useState<AccountRow | null>(null);
   const [addingSeller, setAddingSeller] = useState(false);
+  const [addingBuyer, setAddingBuyer] = useState(false);
 
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -129,7 +131,11 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
             <Btn variant="accent" onClick={() => setAddingSeller(true)}>
               <Plus size={15} /> إضافة بائع
             </Btn>
-          ) : undefined
+          ) : (
+            <Btn variant="accent" onClick={() => setAddingBuyer(true)}>
+              <Plus size={15} /> {kind === 'individual' ? 'إضافة مشتري فرد' : 'إضافة مشتري شركة'}
+            </Btn>
+          )
         }
       />
 
@@ -231,6 +237,9 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
         <SuspendDialog row={suspendFor} kind={kind} onClose={() => setSuspendFor(null)} />
       )}
       {addingSeller && <AddSellerModal onClose={() => setAddingSeller(false)} />}
+      {addingBuyer && kind !== 'seller' && (
+        <AddBuyerModal kind={kind} onClose={() => setAddingBuyer(false)} />
+      )}
     </div>
   );
 }

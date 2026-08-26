@@ -3,7 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { FileSpreadsheet } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { imageBytesToFile, imageBytesToObjectUrl, uploadProductImage } from '../lib/product-image';
-import { parseProductXlsx, planProductImport, type ImportPlan, type ParsedProductRow } from '../lib/product-xlsx';
+import { parseProductXlsx, planProductImport, type ImportPlan, type PlannedProductRow } from '../lib/product-xlsx';
+import { skuFromSourceCode } from '../lib/catalog-sku';
 import { useAdmin } from './Guard';
 import { Modal } from './Modal';
 import { useToast } from './Toast';
@@ -155,6 +156,7 @@ export function ImportProductsModal({
         const images = row.image ? [await uploadProductImage(imageBytesToFile(row.image.bytes, row.image.ext))] : [];
         const { error } = await supabase.from('products').insert({
           sku: row.sku,
+          source_code: row.sourceCode,
           name_ar: row.nameAr,
           description_ar: row.descriptionAr,
           origin_country: row.originCountry,
@@ -190,7 +192,7 @@ export function ImportProductsModal({
     <Modal title="رفع منتجات من Excel" open={open} onClose={onClose} wide>
       <div className="space-y-4">
         <p className="text-sm text-subtext">
-          نفس نموذج الشيت: Product Name, Made In, Code, Description, Image. أعمدة Shop تُتجاهل، والـ SKU الموجود مسبقاً لا يُضاف.
+          نفس نموذج الشيت: Product Name, Made In, Code, Description, Image. عمود Code خاص بيك، والـ SKU بيتولد منه للعرض في التطبيق. الكود الموجود مسبقاً لا يُضاف.
         </p>
         {locked ? (
           <div className="grid grid-cols-2 gap-3">
@@ -277,7 +279,7 @@ export function ImportProductsModal({
           <div className="space-y-3 rounded-xl bg-surface p-3 ring-1 ring-line">
             <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
               <Stat label="سيُضاف" value={plan.toInsert.length} />
-              <Stat label="SKU موجود" value={plan.skippedDuplicate.length} />
+              <Stat label="كود موجود" value={plan.skippedDuplicate.length} />
               <Stat label="ناقص اسم/كود" value={plan.skippedInvalid.length} />
               <Stat label="بصور" value={plan.toInsert.filter((r) => r.image).length} />
             </div>
@@ -325,7 +327,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function PreviewRow({ row }: { row: ParsedProductRow }) {
+function PreviewRow({ row }: { row: PlannedProductRow }) {
   const url = useMemo(() => {
     if (!row.image) return null;
     return imageBytesToObjectUrl(row.image.bytes, row.image.ext);
@@ -351,13 +353,23 @@ function isXlsxFile(file: File): boolean {
   return name.endsWith('.xlsx') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }
 
-async function fetchExistingSkus(skus: string[]): Promise<Set<string>> {
+async function fetchExistingSkus(codes: string[]): Promise<Set<string>> {
   const found = new Set<string>();
-  for (let i = 0; i < skus.length; i += 100) {
-    const part = skus.slice(i, i + 100);
-    const { data, error } = await supabase.from('products').select('sku').in('sku', part);
-    if (error) throw new Error(arError(error));
-    for (const r of data ?? []) found.add(r.sku);
+  for (let i = 0; i < codes.length; i += 100) {
+    const part = codes.slice(i, i + 100);
+    const genPart = part.map((c) => skuFromSourceCode(c));
+    const [bySku, bySource, byGenerated] = await Promise.all([
+      supabase.from('products').select('sku, source_code').in('sku', part),
+      supabase.from('products').select('sku, source_code').in('source_code', part),
+      supabase.from('products').select('sku, source_code').in('sku', genPart),
+    ]);
+    if (bySku.error) throw new Error(arError(bySku.error));
+    if (bySource.error) throw new Error(arError(bySource.error));
+    if (byGenerated.error) throw new Error(arError(byGenerated.error));
+    for (const r of [...(bySku.data ?? []), ...(bySource.data ?? []), ...(byGenerated.data ?? [])]) {
+      found.add(r.sku);
+      if (r.source_code) found.add(r.source_code);
+    }
   }
   return found;
 }

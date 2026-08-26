@@ -203,3 +203,87 @@ export async function createSeller(input: CreateSellerInput): Promise<string> {
   if (!data?.company_id) throw new Error('تعذر إنشاء البائع');
   return data.company_id;
 }
+
+export type CreateIndividualBuyerInput = {
+  email: string;
+  password: string;
+  fullName: string;
+  phone: string;
+  civilId: string;
+  nationality: string;
+};
+
+export type CreateCompanyBuyerInput = {
+  email: string;
+  password: string;
+  companyName: string;
+  phone: string;
+  civilId: string;
+  commercialRegister: string;
+  address: string;
+  companyCode?: string;
+};
+
+async function invokeAdminFn<T extends Record<string, unknown>>(
+  name: string,
+  body: Record<string, unknown>,
+  emptyMessage: string,
+): Promise<T> {
+  const { data, error } = await supabase.functions.invoke<T & { error?: string }>(name, { body });
+  if (data?.error) throw new Error(data.error);
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === 'function') {
+      let parsedBody: { error?: string } | undefined;
+      try {
+        parsedBody = await ctx.json();
+      } catch {
+        parsedBody = undefined;
+      }
+      if (parsedBody?.error) throw new Error(parsedBody.error);
+    }
+    throw new Error(arError(error));
+  }
+  if (!data) throw new Error(emptyMessage);
+  return data;
+}
+
+/** إنشاء مشتري فرد — Edge Function لأن إنشاء مستخدم Auth محتاج service role. */
+export async function createIndividualBuyer(input: CreateIndividualBuyerInput): Promise<string> {
+  const data = await invokeAdminFn<{ profile_id?: string }>(
+    'admin-create-buyer',
+    {
+      kind: 'individual',
+      email: input.email,
+      password: input.password,
+      full_name: input.fullName,
+      phone: input.phone,
+      civil_id: input.civilId,
+      nationality: input.nationality,
+    },
+    'تعذر إنشاء المشتري',
+  );
+  if (!data.profile_id) throw new Error('تعذر إنشاء المشتري');
+  return data.profile_id;
+}
+
+/** إنشاء مشتري شركة — حساب مالك + شركة مشترية + محفظة. */
+export async function createCompanyBuyer(input: CreateCompanyBuyerInput): Promise<string> {
+  const data = await invokeAdminFn<{ company_id?: string }>(
+    'admin-create-buyer',
+    {
+      kind: 'company',
+      email: input.email,
+      password: input.password,
+      name_ar: input.companyName,
+      phone: input.phone,
+      civil_id: input.civilId,
+      commercial_register: input.commercialRegister,
+      address: input.address,
+      company_code: input.companyCode || null,
+    },
+    'تعذر إنشاء المشتري',
+  );
+  if (!data.company_id) throw new Error('تعذر إنشاء المشتري');
+  return data.company_id;
+}

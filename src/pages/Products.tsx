@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { uploadProductImage } from '../lib/product-image';
+import { skuFromSourceCode } from '../lib/catalog-sku';
 import { PageHeader, Btn, Field, Input, Select, Toggle, StatusChip, Money } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { ImportProductsModal } from '../components/ImportProductsModal';
@@ -13,6 +14,7 @@ import { useToast } from '../components/Toast';
 type Row = {
   id: string;
   sku: string;
+  source_code: string | null;
   name_ar: string;
   brand: string | null;
   origin_country: string | null;
@@ -48,7 +50,7 @@ export default function Products() {
       let q = supabase
         .from('products')
         .select(
-          `id, sku, name_ar, brand, origin_country, images, is_active,
+          `id, sku, source_code, name_ar, brand, origin_country, images, is_active,
            specialty:specialties (name_ar), category:categories (name_ar), unit:units (name_ar),
            seller_products (count)`,
         )
@@ -182,7 +184,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
-    sku: product?.sku ?? '',
+    source_code: product?.source_code ?? '',
     name_ar: product?.name_ar ?? '',
     brand: product?.brand ?? '',
     origin_country: product?.origin_country ?? '',
@@ -191,6 +193,8 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
     category_id: '',
     unit_id: '',
   });
+  const generatedSku = form.source_code.trim() ? skuFromSourceCode(form.source_code) : '';
+  const displaySku = product?.sku || generatedSku;
 
   const { data: lookups } = useQuery({
     queryKey: ['product-lookups'],
@@ -251,7 +255,8 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!form.sku.trim() || !form.name_ar.trim()) throw new Error('SKU والاسم مطلوبان');
+      if (!form.name_ar.trim()) throw new Error('الاسم مطلوب');
+      if (!product && !form.source_code.trim()) throw new Error('الكود مطلوب');
       if (!form.specialty_id || !form.unit_id) throw new Error('اختر التخصص والوحدة');
       // XOR: المنتج يت ربط بورقة فقط (مستوى مفيهوش فروع)
       if (form.category_id) {
@@ -275,7 +280,8 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
         }
       }
       const payload = {
-        sku: form.sku.trim(),
+        sku: product?.sku ?? skuFromSourceCode(form.source_code),
+        source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
         brand: form.brand.trim() || null,
         origin_country: form.origin_country.trim() || null,
@@ -341,13 +347,20 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
           </div>
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="SKU">
-            <Input dir="ltr" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+          <Field label="الكود" hint="كودك الخاص من الإكسل — لا يظهر في التطبيق">
+            <Input
+              dir="ltr"
+              value={form.source_code}
+              onChange={(e) => setForm({ ...form, source_code: e.target.value })}
+            />
           </Field>
-          <Field label="الاسم (عربي)">
-            <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
+          <Field label="SKU" hint="يتولد تلقائيًا ويظهر في التطبيق">
+            <Input dir="ltr" value={displaySku} readOnly className="bg-surface" />
           </Field>
         </div>
+        <Field label="الاسم (عربي)">
+          <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="التخصص">
             <Select value={form.specialty_id} onChange={(e) => setForm({ ...form, specialty_id: e.target.value, category_id: '' })}>

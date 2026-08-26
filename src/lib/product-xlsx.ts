@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate';
+import { skuFromSourceCode } from './catalog-sku';
 
 export type ParsedProductImage = {
   bytes: Uint8Array;
@@ -14,11 +15,15 @@ export type ParsedProductRow = {
   image: ParsedProductImage | null;
 };
 
+export type PlannedProductRow = ParsedProductRow & {
+  sourceCode: string;
+};
+
 export type ImportSkipReason = 'missing_name' | 'missing_sku';
 
 export type ImportPlan = {
-  toInsert: ParsedProductRow[];
-  skippedDuplicate: ParsedProductRow[];
+  toInsert: PlannedProductRow[];
+  skippedDuplicate: PlannedProductRow[];
   skippedInvalid: { rowNumber: number; reason: ImportSkipReason }[];
 };
 
@@ -38,29 +43,38 @@ const BAD_HEADERS =
 
 export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<string>): ImportPlan {
   const seen = new Set([...existingSkus].map((s) => s.trim()));
-  const toInsert: ParsedProductRow[] = [];
-  const skippedDuplicate: ParsedProductRow[] = [];
+  const toInsert: PlannedProductRow[] = [];
+  const skippedDuplicate: PlannedProductRow[] = [];
   const skippedInvalid: ImportPlan['skippedInvalid'] = [];
 
   for (const r of rows) {
     const nameAr = r.nameAr.trim();
-    const sku = r.sku.trim();
+    const sourceCode = r.sku.trim();
     const originCountry = r.originCountry?.trim() || null;
     const descriptionAr = r.descriptionAr?.trim() || null;
-    if (!nameAr && !sku && !originCountry && !descriptionAr && !r.image) continue;
+    if (!nameAr && !sourceCode && !originCountry && !descriptionAr && !r.image) continue;
     if (!nameAr) {
       skippedInvalid.push({ rowNumber: r.rowNumber, reason: 'missing_name' });
       continue;
     }
-    if (!sku) {
+    if (!sourceCode) {
       skippedInvalid.push({ rowNumber: r.rowNumber, reason: 'missing_sku' });
       continue;
     }
-    const normalized = { ...r, nameAr, sku, originCountry, descriptionAr };
-    if (seen.has(sku)) {
+    const sku = skuFromSourceCode(sourceCode);
+    const normalized: PlannedProductRow = {
+      ...r,
+      nameAr,
+      sku,
+      sourceCode,
+      originCountry,
+      descriptionAr,
+    };
+    if (seen.has(sourceCode) || seen.has(sku)) {
       skippedDuplicate.push(normalized);
       continue;
     }
+    seen.add(sourceCode);
     seen.add(sku);
     toInsert.push(normalized);
   }

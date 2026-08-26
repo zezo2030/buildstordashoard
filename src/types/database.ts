@@ -13,7 +13,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -784,6 +784,7 @@ export type Database = {
           created_at: string
           discount_code_id: string
           id: string
+          order_group_id: string | null
           order_id: string | null
           user_id: string
         }
@@ -792,6 +793,7 @@ export type Database = {
           created_at?: string
           discount_code_id: string
           id?: string
+          order_group_id?: string | null
           order_id?: string | null
           user_id: string
         }
@@ -800,6 +802,7 @@ export type Database = {
           created_at?: string
           discount_code_id?: string
           id?: string
+          order_group_id?: string | null
           order_id?: string | null
           user_id?: string
         }
@@ -816,6 +819,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discount_redemptions_order_group_id_fkey"
+            columns: ["order_group_id"]
+            isOneToOne: false
+            referencedRelation: "order_groups"
             referencedColumns: ["id"]
           },
           {
@@ -1145,6 +1155,8 @@ export type Database = {
           subtotal: number
           total: number
           type: string
+          void_reason: string | null
+          voided_at: string | null
         }
         Insert: {
           buyer_snapshot: Json
@@ -1162,6 +1174,8 @@ export type Database = {
           subtotal: number
           total: number
           type?: string
+          void_reason?: string | null
+          voided_at?: string | null
         }
         Update: {
           buyer_snapshot?: Json
@@ -1179,6 +1193,8 @@ export type Database = {
           subtotal?: number
           total?: number
           type?: string
+          void_reason?: string | null
+          voided_at?: string | null
         }
         Relationships: [
           {
@@ -1768,7 +1784,7 @@ export type Database = {
           company_id: string | null
           created_at: string
           id: string
-          name_ar: string
+          name_ar: string | null
           notes: string | null
           qty: number | null
           requester_id: string
@@ -1783,7 +1799,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           id?: string
-          name_ar: string
+          name_ar?: string | null
           notes?: string | null
           qty?: number | null
           requester_id: string
@@ -1798,7 +1814,7 @@ export type Database = {
           company_id?: string | null
           created_at?: string
           id?: string
-          name_ar?: string
+          name_ar?: string | null
           notes?: string | null
           qty?: number | null
           requester_id?: string
@@ -1838,6 +1854,89 @@ export type Database = {
           },
         ]
       }
+      product_submissions: {
+        Row: {
+          admin_note: string | null
+          brand: string | null
+          company_id: string | null
+          created_at: string
+          description_ar: string | null
+          id: string
+          images: string[]
+          name_ar: string
+          name_en: string | null
+          origin_country: string | null
+          seller_id: string
+          specialty_id: string
+          status: string
+          unit_id: string
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          brand?: string | null
+          company_id?: string | null
+          created_at?: string
+          description_ar?: string | null
+          id?: string
+          images: string[]
+          name_ar: string
+          name_en?: string | null
+          origin_country?: string | null
+          seller_id: string
+          specialty_id: string
+          status?: string
+          unit_id: string
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          brand?: string | null
+          company_id?: string | null
+          created_at?: string
+          description_ar?: string | null
+          id?: string
+          images?: string[]
+          name_ar?: string
+          name_en?: string | null
+          origin_country?: string | null
+          seller_id?: string
+          specialty_id?: string
+          status?: string
+          unit_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_submissions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_submissions_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_submissions_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_submissions_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           attributes: Json
@@ -1855,6 +1954,7 @@ export type Database = {
           origin_country: string | null
           search_doc: unknown
           sku: string
+          source_code: string | null
           specialty_id: string
           unit_id: string
           updated_at: string
@@ -1875,6 +1975,7 @@ export type Database = {
           origin_country?: string | null
           search_doc?: unknown
           sku: string
+          source_code?: string | null
           specialty_id: string
           unit_id: string
           updated_at?: string
@@ -1895,6 +1996,7 @@ export type Database = {
           origin_country?: string | null
           search_doc?: unknown
           sku?: string
+          source_code?: string | null
           specialty_id?: string
           unit_id?: string
           updated_at?: string
@@ -1938,6 +2040,7 @@ export type Database = {
           avatar_url: string | null
           civil_id: string | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           full_name: string
           id: string
@@ -1961,6 +2064,7 @@ export type Database = {
           avatar_url?: string | null
           civil_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           full_name: string
           id: string
@@ -1984,6 +2088,7 @@ export type Database = {
           avatar_url?: string | null
           civil_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           full_name?: string
           id?: string
@@ -2511,6 +2616,7 @@ export type Database = {
         Row: {
           buyer_company_id: string | null
           buyer_type: string | null
+          buyer_user_id: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -2524,6 +2630,7 @@ export type Database = {
         Insert: {
           buyer_company_id?: string | null
           buyer_type?: string | null
+          buyer_user_id?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -2537,6 +2644,7 @@ export type Database = {
         Update: {
           buyer_company_id?: string | null
           buyer_type?: string | null
+          buyer_user_id?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -2553,6 +2661,13 @@ export type Database = {
             columns: ["buyer_company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_discount_rules_buyer_user_id_fkey"
+            columns: ["buyer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -3322,6 +3437,28 @@ export type Database = {
         }
         Returns: number
       }
+      admin_complete_individual_buyer: {
+        Args: {
+          p_civil_id: string
+          p_full_name: string
+          p_nationality: string
+          p_owner_id: string
+          p_phone: string
+        }
+        Returns: string
+      }
+      admin_create_buyer_company: {
+        Args: {
+          p_address?: string
+          p_civil_id: string
+          p_commercial_register?: string
+          p_company_code?: string
+          p_name_ar: string
+          p_owner_id: string
+          p_phone: string
+        }
+        Returns: string
+      }
       admin_create_seller_company: {
         Args: {
           p_commercial_register?: string
@@ -3334,6 +3471,14 @@ export type Database = {
         Returns: string
       }
       admin_dashboard_stats: { Args: never; Returns: Json }
+      admin_decide_product_request: {
+        Args: { p_note?: string; p_request_id: string; p_status: string }
+        Returns: undefined
+      }
+      admin_decide_product_submission: {
+        Args: { p_id: string; p_note?: string; p_status: string }
+        Returns: undefined
+      }
       admin_decide_withdrawal: {
         Args: {
           p_approve: boolean
@@ -3476,6 +3621,155 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      buyer_billing_structure: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          item_id: string
+          line_total: unknown
+          name_ar: string
+          qty: number
+          seller_id: string
+          seller_name: string
+          site_code: string
+          site_id: string
+          site_name: string
+          sku: string
+          unit_ar: string
+        }[]
+      }
+      buyer_invoice_files: {
+        Args: {
+          p_from?: string
+          p_item?: string
+          p_search?: string
+          p_site?: string
+          p_to?: string
+        }
+        Returns: {
+          invoice_id: string
+          invoice_number: string
+          issued_at: string
+          order_id: string
+          pdf_path: string
+          seller_name: string
+          site_code: string
+          site_name: string
+          total: unknown
+        }[]
+      }
+      buyer_invoice_items: {
+        Args: {
+          p_from?: string
+          p_item?: string
+          p_search?: string
+          p_site?: string
+          p_to?: string
+        }
+        Returns: {
+          invoice_number: string
+          issued_at: string
+          item_id: string
+          line_total: unknown
+          name_ar: string
+          qty: number
+          seller_name: string
+          site_name: string
+          sku: string
+          unit_ar: string
+          unit_price: unknown
+        }[]
+      }
+      buyer_report_past_orders: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          delivered_at: string
+          grand_total: unknown
+          items_count: number
+          order_id: string
+          order_number: string
+          placed_at: string
+          seller_label: string
+        }[]
+      }
+      buyer_report_products_by_site: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          company_name: string
+          image_url: string
+          name_ar: string
+          product_id: string
+          qty_sold: number
+          site_code: string
+          site_id: string
+          site_name: string
+          sku: string
+          total_amount: unknown
+          unit_ar: string
+        }[]
+      }
+      buyer_report_products_by_supplier: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          image_url: string
+          name_ar: string
+          product_id: string
+          qty_sold: number
+          sku: string
+          supplier_id: string
+          supplier_logo: string
+          supplier_name: string
+          total_amount: unknown
+          unit_ar: string
+        }[]
+      }
+      buyer_report_top_products: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          image_url: string
+          name_ar: string
+          orders_count: number
+          product_id: string
+          qty_sold: number
+          sku: string
+          total_amount: unknown
+          unit_ar: string
+        }[]
+      }
+      buyer_report_top_sites: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          company_name: string
+          items_count: number
+          orders_count: number
+          site_code: string
+          site_id: string
+          site_name: string
+          total_amount: unknown
+          units_qty: number
+        }[]
+      }
+      buyer_report_top_specialties: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          image_url: string
+          items_count: number
+          name_ar: string
+          specialty_id: string
+          total_amount: unknown
+          units_qty: number
+        }[]
+      }
+      buyer_report_top_suppliers: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          logo_url: string
+          name_ar: string
+          orders_count: number
+          seller_company_id: string
+          total_amount: unknown
+          units_qty: number
+        }[]
       }
       buyer_respond_quote: {
         Args: { p_order_id: string; p_removed_item_ids?: string[] }
@@ -3644,6 +3938,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_my_account: { Args: never; Returns: undefined }
       issue_draft_quotation: { Args: { p_valid_until?: string }; Returns: Json }
       list_favorite_products: { Args: never; Returns: Json }
       pay_order: {
@@ -3800,6 +4095,13 @@ export type Database = {
           reservation_id: string
         }[]
       }
+      seller_add_products: {
+        Args: { p_product_ids: string[] }
+        Returns: {
+          product_id: string
+          seller_product_id: string
+        }[]
+      }
       seller_advance_order: {
         Args: {
           p_order_id: string
@@ -3864,10 +4166,27 @@ export type Database = {
           p_search?: string
         }
         Returns: {
+          buyer_kind: string
           company_code: string
           id: string
           name_ar: string
           total_count: number
+        }[]
+      }
+      seller_catalog_list: {
+        Args: { p_search?: string; p_specialty_id?: string }
+        Returns: {
+          category_id: string
+          image_url: string
+          is_active: boolean
+          name_ar: string
+          price: unknown
+          product_id: string
+          seller_product_id: string
+          sku: string
+          specialty_id: string
+          specialty_name: string
+          unit_ar: string
         }[]
       }
       seller_credit_list: {
@@ -3884,6 +4203,16 @@ export type Database = {
           remaining: unknown
           starts_on: string
           total_count: number
+        }[]
+      }
+      seller_dashboard_summary: {
+        Args: never
+        Returns: {
+          customers_count: number
+          listed_items: number
+          orders_count: number
+          products_sold: number
+          total_sales: unknown
         }[]
       }
       seller_delete_credit: { Args: { p_id: string }; Returns: undefined }
@@ -3915,6 +4244,7 @@ export type Database = {
         Returns: {
           buyer_company_id: string
           buyer_type: string
+          buyer_user_id: string
           company_code: string
           company_label: string
           id: string
@@ -3973,6 +4303,22 @@ export type Database = {
           review_due_at: string
           status: Database["public"]["Enums"]["order_status"]
           total_count: number
+        }[]
+      }
+      seller_pickable_products: {
+        Args: { p_search?: string; p_specialty_id?: string }
+        Returns: {
+          image_url: string
+          in_catalog: boolean
+          is_active: boolean
+          name_ar: string
+          price: unknown
+          product_id: string
+          seller_product_id: string
+          sku: string
+          specialty_id: string
+          specialty_name: string
+          unit_ar: string
         }[]
       }
       seller_quote_order: {
@@ -4054,6 +4400,111 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      seller_report_past_orders: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          buyer_code: string
+          buyer_label: string
+          delivered_at: string
+          grand_total: unknown
+          items_count: number
+          order_id: string
+          order_number: string
+          placed_at: string
+        }[]
+      }
+      seller_report_products_by_customer: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          buyer_code: string
+          buyer_key: string
+          buyer_label: string
+          image_url: string
+          name_ar: string
+          product_id: string
+          qty_sold: number
+          sku: string
+          total_amount: unknown
+          unit_ar: string
+        }[]
+      }
+      seller_report_products_by_site: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          company_name: string
+          image_url: string
+          name_ar: string
+          product_id: string
+          qty_sold: number
+          site_code: string
+          site_id: string
+          site_name: string
+          sku: string
+          total_amount: unknown
+          unit_ar: string
+        }[]
+      }
+      seller_report_purchase_distribution: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          buyer_code: string
+          buyer_key: string
+          buyer_label: string
+          items_count: number
+          orders_count: number
+          sites_count: number
+          total_amount: unknown
+        }[]
+      }
+      seller_report_top_customers: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          buyer_code: string
+          buyer_key: string
+          buyer_label: string
+          items_count: number
+          orders_count: number
+          total_amount: unknown
+          units_qty: number
+        }[]
+      }
+      seller_report_top_products: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          image_url: string
+          name_ar: string
+          orders_count: number
+          product_id: string
+          qty_sold: number
+          sku: string
+          total_amount: unknown
+          unit_ar: string
+        }[]
+      }
+      seller_report_top_sites: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          company_name: string
+          items_count: number
+          orders_count: number
+          site_code: string
+          site_id: string
+          site_name: string
+          total_amount: unknown
+          units_qty: number
+        }[]
+      }
+      seller_report_top_specialties: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          image_url: string
+          items_count: number
+          name_ar: string
+          specialty_id: string
+          total_amount: unknown
+          units_qty: number
+        }[]
       }
       seller_return_detail: {
         Args: { p_return_id: string }
@@ -4197,6 +4648,7 @@ export type Database = {
         Args: {
           p_buyer_company_id?: string
           p_buyer_type?: string
+          p_buyer_user_id?: string
           p_id?: string
           p_is_active?: boolean
           p_kind: string
@@ -4207,6 +4659,7 @@ export type Database = {
         Returns: {
           buyer_company_id: string | null
           buyer_type: string | null
+          buyer_user_id: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -4224,9 +4677,28 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      seller_set_prices: { Args: { p_items: Json }; Returns: number }
+      seller_set_product_active: {
+        Args: { p_is_active: boolean; p_seller_product_id: string }
+        Returns: boolean
+      }
+      seller_specialty_summary: {
+        Args: never
+        Returns: {
+          image_url: string
+          name_ar: string
+          product_count: number
+          specialty_id: string
+          total_before: unknown
+        }[]
+      }
       set_draft_quotation_item_supplier: {
         Args: { p_item_id: string; p_seller_company_id?: string }
         Returns: Json
+      }
+      set_invoice_pdf_path: {
+        Args: { p_invoice_id: string; p_path: string }
+        Returns: string
       }
       update_draft_quotation_item: {
         Args: { p_item_id: string; p_preferred_origin?: string; p_qty: unknown }

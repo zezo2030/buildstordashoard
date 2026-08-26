@@ -100,11 +100,22 @@ export const walletTxnLabels: LabelMap = {
   adjustment: { label: 'تسوية إدارية', tone: 'gray' },
 };
 
+// القيم دي هي بالظبط قيد `product_requests.status` في القاعدة — كان فيها
+// `approved`/`closed` مش موجودين في القيد، وناقصها `in_review`/`fulfilled`.
 export const productRequestStatusLabels: LabelMap = {
   open: { label: 'مفتوح', tone: 'orange' },
-  approved: { label: 'تمت الإضافة', tone: 'green' },
+  in_review: { label: 'قيد المراجعة', tone: 'blue' },
+  fulfilled: { label: 'تمت الإضافة', tone: 'green' },
   rejected: { label: 'مرفوض', tone: 'red' },
-  closed: { label: 'مغلق', tone: 'gray' },
+};
+
+// اقتراح المنتج من البائع مفرداته غير مفردات طلب المشتري — خريطة مستقلة عن قصد:
+// `approved` هنا وعد بالإضافة، و`added` هي التنفيذ.
+export const productSubmissionStatusLabels: LabelMap = {
+  open: { label: 'جديد', tone: 'orange' },
+  approved: { label: 'موافَق — بانتظار الإضافة', tone: 'blue' },
+  added: { label: 'تمت الإضافة', tone: 'green' },
+  rejected: { label: 'مرفوض', tone: 'red' },
 };
 
 export const discountScopeLabels: Record<string, string> = {
