@@ -121,7 +121,7 @@ export default function Products() {
         </span>
       ),
     },
-    { key: 'edit', header: '', render: (r) => <Btn variant="ghost" onClick={() => setEditing(r)}>تعديل</Btn> },
+    { key: 'edit', header: '', render: (r) => <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setEditing(r)}>تعديل</Btn> },
   ];
 
   return (

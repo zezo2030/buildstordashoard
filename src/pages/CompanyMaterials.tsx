@@ -282,8 +282,8 @@ function MaterialsListTab({ companyId, companyName }: { companyId: string; compa
       key: 'actions',
       header: '',
       render: (r) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          <Btn variant="ghost" onClick={() => setEditor(r)}>تعديل</Btn>
+        <div className="flex flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setEditor(r)}>تعديل</Btn>
           <button
             type="button"
             className="rounded-lg p-2 text-danger hover:bg-red-50"

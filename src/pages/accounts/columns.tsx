@@ -24,7 +24,7 @@ function statusCell(r: AccountRow) {
     <span title={why || undefined}>
       <StatusChip label="موقوف" tone="red" />
       {r.suspendReason && (
-        <span className="mt-0.5 block max-w-40 truncate text-[11px] text-subtext">
+        <span className="mt-0.5 block break-words text-[11px] text-subtext">
           {r.suspendReason}
         </span>
       )}
@@ -41,9 +41,9 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
       header: isSeller ? 'الشركة' : 'المستخدم',
       sortKey: 'name',
       render: (r) => (
-        <div className="min-w-40">
-          <div className="font-medium">{r.name}</div>
-          <div className="text-xs text-subtext" dir="ltr">
+        <div>
+          <div className="break-words font-medium">{r.name}</div>
+          <div className="break-all text-xs text-subtext" dir="ltr">
             {isSeller ? (r.ownerName ?? '') : (r.email ?? r.phone ?? '')}
           </div>
         </div>
@@ -99,12 +99,12 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
     key: 'actions',
     header: 'الإجراءات',
     render: (r) => (
-      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col items-stretch gap-1" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           disabled={!r.ownerId}
           title={r.ownerId ? undefined : 'لا يوجد حساب مالك لهذه الشركة'}
-          className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-primary hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+          className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-primary hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
           onClick={() => a.onPassword(r)}
         >
           كلمة المرور
@@ -112,7 +112,7 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
         {r.status === 'active' ? (
           <button
             type="button"
-            className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-danger hover:bg-red-50"
+            className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-danger hover:bg-red-50"
             onClick={() => a.onSuspend(r)}
           >
             تعليق
@@ -121,7 +121,7 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
           <button
             type="button"
             disabled={a.isReactivating?.(r)}
-            className="rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-success hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-success hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => a.onReactivate(r)}
           >
             إعادة تفعيل

@@ -6,10 +6,10 @@ export function LocationCell({ loc }: { loc: Loc | null }) {
   const contact = [loc.contactName, loc.contactPhone].filter(Boolean);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="truncate font-medium">{loc.name ?? '—'}</span>
-      {loc.address && <span className="truncate text-xs text-subtext">{loc.address}</span>}
+      <span className="break-words font-medium">{loc.name ?? '—'}</span>
+      {loc.address && <span className="break-words text-xs text-subtext">{loc.address}</span>}
       {contact.length > 0 && (
-        <span className="truncate text-xs text-subtext">
+        <span className="break-words text-xs text-subtext">
           {loc.contactName}
           {loc.contactName && loc.contactPhone && ' · '}
           {loc.contactPhone && <span dir="ltr">{loc.contactPhone}</span>}

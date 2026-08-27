@@ -35,7 +35,7 @@ const toneClasses: Record<Tone, string> = {
 
 export function StatusChip({ label, tone }: { label: string; tone: Tone }) {
   return (
-    <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${toneClasses[tone]}`}>
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium leading-snug ${toneClasses[tone]}`}>
       {label}
     </span>
   );

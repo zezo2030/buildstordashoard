@@ -140,18 +140,18 @@ export default function ProductRequests() {
       header: 'المرفقات',
       render: (r) =>
         r.attachments?.length ? (
-          <div className="flex max-w-44 flex-col items-start gap-1">
+          <div className="flex flex-col items-start gap-1">
             {r.attachments.map((path) => (
               <button
                 key={path}
                 type="button"
-                className="flex w-full items-center gap-2 text-start text-xs text-accent hover:underline"
+                className="flex w-full items-start gap-1 text-start text-xs text-accent hover:underline"
                 onClick={() => {
                   openRequestDoc(path).catch((e) => toast('error', (e as Error).message));
                 }}
               >
-                <Paperclip size={13} className="shrink-0" />
-                <span className="truncate" dir="ltr">{fileName(path)}</span>
+                <Paperclip size={13} className="mt-0.5 shrink-0" />
+                <span className="break-all" dir="ltr">{fileName(path)}</span>
               </button>
             ))}
           </div>
@@ -173,9 +173,9 @@ export default function ProductRequests() {
       header: 'الإجراء',
       render: (r) =>
         DECIDABLE.includes(r.status) ? (
-          <div className="flex gap-2">
-            <Btn variant="accent" onClick={() => setDeciding({ row: r, to: 'fulfilled' })}>قبول</Btn>
-            <Btn variant="ghost" onClick={() => setDeciding({ row: r, to: 'rejected' })}>رفض</Btn>
+          <div className="flex flex-col gap-1">
+            <Btn variant="accent" className="px-2.5 py-1 text-xs" onClick={() => setDeciding({ row: r, to: 'fulfilled' })}>قبول</Btn>
+            <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setDeciding({ row: r, to: 'rejected' })}>رفض</Btn>
           </div>
         ) : (
           <span className="text-xs text-subtext">{r.admin_note ?? ''}</span>

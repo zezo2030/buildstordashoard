@@ -77,11 +77,11 @@ export default function Wallets() {
       key: 'actions',
       header: 'الإجراء',
       render: (r) => (
-        <div className="flex gap-2">
-          <Btn variant="ghost" onClick={() => setLedgerFor(r)}>
+        <div className="flex flex-col gap-1">
+          <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setLedgerFor(r)}>
             دفتر الحركات
           </Btn>
-          <Btn variant="primary" onClick={() => setAdjustFor(r)}>
+          <Btn variant="primary" className="px-2.5 py-1 text-xs" onClick={() => setAdjustFor(r)}>
             تسوية
           </Btn>
         </div>

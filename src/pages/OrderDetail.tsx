@@ -79,8 +79,8 @@ export default function OrderDetail() {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="p-4 lg:col-span-2">
           <h2 className="mb-3 font-bold">الأصناف</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+          <div>
+            <table className="w-full table-fixed text-[13px]">
               <thead>
                 <tr className="border-b border-line text-subtext">
                   <th className="w-8 py-2 text-start font-medium">#</th>

@@ -395,8 +395,8 @@ function ReturnModal({ row, onClose }: { row: ReturnRow; onClose: () => void }) 
         <div className="py-8 text-center text-sm text-subtext">جارٍ التحميل…</div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full min-w-[620px] text-sm">
+          <div className="rounded-lg border border-line">
+            <table className="w-full table-fixed text-[13px]">
               <thead>
                 <tr className="bg-surface text-subtext">
                   <th className="px-3 py-2 text-start font-medium">الصنف</th>

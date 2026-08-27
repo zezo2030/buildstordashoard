@@ -200,7 +200,7 @@ export function Shell() {
       </aside>
 
       <main className="min-w-0 flex-1">
-        <div className="mx-auto max-w-[1400px] p-6 lg:p-8">
+        <div className="w-full p-5 lg:p-6">
           <Outlet />
         </div>
       </main>

@@ -114,7 +114,7 @@ function Tickets() {
           value={r.status}
           onChange={(e) => setTicketStatus.mutate({ id: r.id, status: e.target.value })}
           onClick={(e) => e.stopPropagation()}
-          className="w-36"
+          className="w-full min-w-0 px-2 py-1 text-xs"
         >
           {Object.entries(ticketStatusLabels).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>

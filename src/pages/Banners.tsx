@@ -92,7 +92,7 @@ export default function Banners() {
       key: 'preview',
       header: 'الصورة',
       render: (b) => (
-        <img src={b.image_url} alt="" className="h-14 w-36 rounded-lg object-cover ring-1 ring-line" />
+        <img src={b.image_url} alt="" className="h-14 w-full max-w-36 rounded-lg object-cover ring-1 ring-line" />
       ),
     },
     {
@@ -110,9 +110,10 @@ export default function Banners() {
       key: 'actions',
       header: '',
       render: (b) => (
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-1">
           <Btn
             variant="ghost"
+            className="px-2.5 py-1 text-xs"
             onClick={() =>
               setEditing({
                 id: b.id,
@@ -124,7 +125,7 @@ export default function Banners() {
           >
             تعديل
           </Btn>
-          <Btn variant="ghost" className="text-danger" onClick={() => setDeleting(b)}>حذف</Btn>
+          <Btn variant="ghost" className="px-2.5 py-1 text-xs text-danger" onClick={() => setDeleting(b)}>حذف</Btn>
         </div>
       ),
     },
