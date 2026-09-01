@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { skuFromSourceCode } from './catalog-sku';
 
+const PUBLIC_SKU = /^[A-Z]\d{6}$/;
+
 describe('skuFromSourceCode', () => {
-  it('builds a public SKU that is not the private Excel code', () => {
+  it('builds a public SKU of one letter and six digits, not the Excel code', () => {
     const sku = skuFromSourceCode('69011320');
     expect(sku).not.toBe('69011320');
-    expect(sku.startsWith('BS-')).toBe(true);
+    expect(sku).toMatch(PUBLIC_SKU);
   });
 
   it('returns the same SKU every time for the same code', () => {

@@ -98,40 +98,6 @@ export async function setAccountStatus(profileId: string, status: 'active' | 'su
   }
 }
 
-/**
- * البت في طلب سحب. الموافقة (تحويل + خصم من المحفظة) تتطلب الـ RPC حصرًا —
- * لا توجد سياسة تسمح للكلاينت بترحيل قيد في دفتر المحفظة. الرفض له fallback مباشر.
- */
-export async function decideWithdrawal(args: {
-  id: string;
-  approve: boolean;
-  note?: string;
-  transferRef?: string;
-}) {
-  try {
-    return await rpc('admin_decide_withdrawal', {
-      p_id: args.id,
-      p_approve: args.approve,
-      p_note: args.note ?? null,
-      p_transfer_ref: args.transferRef ?? null,
-    });
-  } catch (e) {
-    if (!isMissingFn(e) || args.approve) throw new Error(arError(e));
-  }
-  const { data: me } = await supabase.auth.getUser();
-  const { error } = await supabase
-    .from('withdrawal_requests')
-    .update({
-      status: 'rejected',
-      admin_note: args.note ?? null,
-      decided_by: me.user?.id,
-      decided_at: new Date().toISOString(),
-    })
-    .eq('id', args.id)
-    .eq('status', 'pending');
-  if (error) throw new Error(arError(error));
-}
-
 /** تسوية يدوية على محفظة — RPC فقط (قيد دفتر). */
 export async function walletAdjust(walletId: string, amount: number, description: string) {
   try {

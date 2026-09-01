@@ -10,6 +10,7 @@ import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { ImportProductsModal } from '../components/ImportProductsModal';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { linkedSpecialtyIds, specialtyLinkIds } from '../lib/product-specialties';
 
 type Row = {
   id: string;
@@ -20,10 +21,12 @@ type Row = {
   origin_country: string | null;
   images: string[];
   is_active: boolean;
+  specialty_id?: string;
   specialty: { name_ar: string } | null;
   category: { name_ar: string } | null;
   unit: { name_ar: string } | null;
   seller_products: { count: number }[];
+  product_specialties?: { specialty_id: string; specialties: { name_ar: string } | null }[];
 };
 
 export default function Products() {
@@ -47,16 +50,19 @@ export default function Products() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['products', search, specialty, page],
     queryFn: async () => {
+      const linksSelect = specialty !== 'all'
+        ? 'product_specialties!inner (specialty_id, specialties (name_ar))'
+        : 'product_specialties (specialty_id, specialties (name_ar))';
       let q = supabase
         .from('products')
         .select(
-          `id, sku, source_code, name_ar, brand, origin_country, images, is_active,
-           specialty:specialties (name_ar), category:categories (name_ar), unit:units (name_ar),
-           seller_products (count)`,
+          `id, sku, source_code, name_ar, brand, origin_country, images, is_active, specialty_id,
+           specialty:specialties!products_specialty_id_fkey (name_ar), category:categories (name_ar), unit:units (name_ar),
+           seller_products (count), ${linksSelect}`,
         )
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-      if (specialty !== 'all') q = q.eq('specialty_id', specialty);
+      if (specialty !== 'all') q = q.eq('product_specialties.specialty_id', specialty);
       if (search.trim()) q = q.or(`name_ar.ilike.%${search.trim()}%,sku.ilike.%${search.trim()}%`);
       const { data, error } = await q;
       if (error) throw new Error(arError(error));
@@ -97,7 +103,18 @@ export default function Products() {
         </div>
       ),
     },
-    { key: 'specialty', header: 'التخصص', render: (r) => r.specialty?.name_ar ?? '—' },
+    {
+      key: 'specialty',
+      header: 'التخصص',
+      render: (r) => {
+        const names = [...new Set(
+          (r.product_specialties ?? [])
+            .map((x) => x.specialties?.name_ar)
+            .filter((n): n is string => !!n),
+        )];
+        return names.length ? names.join('، ') : (r.specialty?.name_ar ?? '—');
+      },
+    },
     { key: 'category', header: 'الفئة', render: (r) => r.category?.name_ar ?? '—' },
     { key: 'unit', header: 'الوحدة', render: (r) => r.unit?.name_ar ?? '—' },
     {
@@ -190,6 +207,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
     origin_country: product?.origin_country ?? '',
     image_url: product?.images?.[0] ?? '',
     specialty_id: '',
+    extra_specialty_ids: [] as string[],
     category_id: '',
     unit_id: '',
   });
@@ -221,13 +239,15 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
     queryFn: async () => {
       const { data } = await supabase
         .from('products')
-        .select('specialty_id, category_id, unit_id, images')
+        .select('specialty_id, category_id, unit_id, images, product_specialties (specialty_id)')
         .eq('id', product!.id)
         .single();
       if (data) {
+        const linked = linkedSpecialtyIds(data.product_specialties);
         setForm((f) => ({
           ...f,
           specialty_id: data.specialty_id ?? '',
+          extra_specialty_ids: linked.filter((id) => id !== data.specialty_id),
           category_id: data.category_id ?? '',
           unit_id: data.unit_id ?? '',
           image_url: data.images?.[0] ?? f.image_url,
@@ -291,10 +311,19 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
         images: form.image_url.trim() ? [form.image_url.trim()] : [],
       };
       const q = product
-        ? supabase.from('products').update(payload).eq('id', product.id)
-        : supabase.from('products').insert(payload);
-      const { error } = await q;
+        ? supabase.from('products').update(payload).eq('id', product.id).select('id').single()
+        : supabase.from('products').insert(payload).select('id').single();
+      const { data: saved, error } = await q;
       if (error) throw new Error(arError(error));
+      if (!saved) throw new Error('تعذر حفظ المنتج');
+      const productId = saved.id;
+      const links = specialtyLinkIds(form.specialty_id, form.extra_specialty_ids);
+      const { error: delErr } = await supabase.from('product_specialties').delete().eq('product_id', productId);
+      if (delErr) throw new Error(arError(delErr));
+      const { error: insErr } = await supabase.from('product_specialties').insert(
+        links.map((specialty_id) => ({ product_id: productId, specialty_id })),
+      );
+      if (insErr) throw new Error(arError(insErr));
     },
     onSuccess: () => {
       toast('success', product ? 'تم تحديث المنتج' : 'تمت إضافة المنتج');
@@ -354,7 +383,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
               onChange={(e) => setForm({ ...form, source_code: e.target.value })}
             />
           </Field>
-          <Field label="SKU" hint="يتولد تلقائيًا ويظهر في التطبيق">
+          <Field label="SKU" hint="يتولد تلقائيًا — حرف و 6 أرقام، يظهر في التطبيق">
             <Input dir="ltr" value={displaySku} readOnly className="bg-surface" />
           </Field>
         </div>
@@ -362,8 +391,19 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
           <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="التخصص">
-            <Select value={form.specialty_id} onChange={(e) => setForm({ ...form, specialty_id: e.target.value, category_id: '' })}>
+          <Field label="التخصص الأساسي" hint="الفئة والتقارير والخصومات على هذا التخصص">
+            <Select
+              value={form.specialty_id}
+              onChange={(e) => {
+                const next = e.target.value;
+                setForm({
+                  ...form,
+                  specialty_id: next,
+                  category_id: '',
+                  extra_specialty_ids: form.extra_specialty_ids.filter((id) => id !== next),
+                });
+              }}
+            >
               <option value="">اختر…</option>
               {(lookups?.specialties ?? []).map((s) => (
                 <option key={s.id} value={s.id}>{s.name_ar}</option>
@@ -379,6 +419,33 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
             </Select>
           </Field>
         </div>
+        {form.specialty_id && (
+          <Field label="تخصصات إضافية" hint="نفس المنتج يظهر في كتالوج التخصصات دي — من غير تكرار السعر أو الطلبات">
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
+              {(lookups?.specialties ?? []).filter((s) => s.id !== form.specialty_id).map((s) => {
+                const checked = form.extra_specialty_ids.includes(s.id);
+                return (
+                  <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-accent"
+                      checked={checked}
+                      onChange={() => {
+                        setForm((f) => ({
+                          ...f,
+                          extra_specialty_ids: checked
+                            ? f.extra_specialty_ids.filter((id) => id !== s.id)
+                            : [...f.extra_specialty_ids, s.id],
+                        }));
+                      }}
+                    />
+                    {s.name_ar}
+                  </label>
+                );
+              })}
+            </div>
+          </Field>
+        )}
         <div className="grid grid-cols-3 gap-3">
           <Field label="الوحدة">
             <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
@@ -410,14 +477,13 @@ function OffersModal({ product, onClose }: { product: Row; onClose: () => void }
     queryFn: async () => {
       const { data, error } = await supabase
         .from('seller_products')
-        .select('id, price, stock_qty, is_active, origin_country, seller:companies (name_ar)')
+        .select('id, price, is_active, origin_country, seller:companies (name_ar)')
         .eq('product_id', product.id)
         .order('price');
       if (error) throw new Error(arError(error));
       return data as unknown as {
         id: string;
         price: number;
-        stock_qty: number | null;
         is_active: boolean;
         origin_country: string | null;
         seller: { name_ar: string } | null;

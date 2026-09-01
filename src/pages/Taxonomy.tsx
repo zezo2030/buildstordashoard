@@ -358,36 +358,24 @@ function TaxonomyBrowser() {
         ) : (
           <div className="divide-y divide-line">
             {specialties.map((s) => (
-              <div key={s.id} className="flex items-center gap-2 px-3 py-2.5 hover:bg-surface/80">
-                <button
-                  type="button"
-                  onClick={() => enterSpecialty(s)}
-                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-start"
-                >
-                  <TaxonomyTile url={s.image_url} label={s.name_ar} />
-                  <span className="min-w-0 flex-1 text-xs text-subtext" dir="ltr">
-                    {s.code}
-                  </span>
-                  <ChevronLeft size={16} className="shrink-0 text-subtext" />
-                </button>
-                <Toggle checked={s.is_active} onChange={() => toggleSpecialty.mutate(s)} />
-                <button
-                  type="button"
-                  className="rounded-lg p-2 text-subtext hover:bg-white hover:text-primary"
-                  onClick={() =>
-                    setEditingSpecialty({
-                      id: s.id,
-                      code: s.code,
-                      name_ar: s.name_ar,
-                      sort_order: s.sort_order,
-                      image_url: s.image_url ?? '',
-                    })
-                  }
-                  title="تعديل"
-                >
-                  <Pencil size={15} />
-                </button>
-              </div>
+              <TaxonomyListRow
+                key={s.id}
+                url={s.image_url}
+                name={s.name_ar}
+                code={s.code}
+                active={s.is_active}
+                onOpen={() => enterSpecialty(s)}
+                onToggle={() => toggleSpecialty.mutate(s)}
+                onEdit={() =>
+                  setEditingSpecialty({
+                    id: s.id,
+                    code: s.code,
+                    name_ar: s.name_ar,
+                    sort_order: s.sort_order,
+                    image_url: s.image_url ?? '',
+                  })
+                }
+              />
             ))}
           </div>
         )}
@@ -509,36 +497,24 @@ function TaxonomyBrowser() {
                 ) : (
                   <div className="divide-y divide-line border-b border-line">
                     {childCategories.map((c) => (
-                      <div key={c.id} className="flex items-center gap-2 px-3 py-2.5 hover:bg-surface/80">
-                        <button
-                          type="button"
-                          onClick={() => enterCategory(c)}
-                          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-start"
-                        >
-                          <TaxonomyTile url={c.image_url} label={c.name_ar} />
-                          <span className="min-w-0 flex-1 text-xs text-subtext" dir="ltr">
-                            {c.code || '—'}
-                          </span>
-                          <ChevronLeft size={16} className="shrink-0 text-subtext" />
-                        </button>
-                        <Toggle checked={c.is_active} onChange={() => toggleCategory.mutate(c)} />
-                        <button
-                          type="button"
-                          className="rounded-lg p-2 text-subtext hover:bg-white hover:text-primary"
-                          onClick={() =>
-                            setEditingCategory({
-                              id: c.id,
-                              code: c.code ?? '',
-                              name_ar: c.name_ar,
-                              sort_order: c.sort_order,
-                              image_url: c.image_url ?? '',
-                            })
-                          }
-                          title="تعديل"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                      </div>
+                      <TaxonomyListRow
+                        key={c.id}
+                        url={c.image_url}
+                        name={c.name_ar}
+                        code={c.code}
+                        active={c.is_active}
+                        onOpen={() => enterCategory(c)}
+                        onToggle={() => toggleCategory.mutate(c)}
+                        onEdit={() =>
+                          setEditingCategory({
+                            id: c.id,
+                            code: c.code ?? '',
+                            name_ar: c.name_ar,
+                            sort_order: c.sort_order,
+                            image_url: c.image_url ?? '',
+                          })
+                        }
+                      />
                     ))}
                   </div>
                 )}
@@ -577,11 +553,8 @@ function TaxonomyBrowser() {
                   </p>
                 ) : (
                   <div className="divide-y divide-line">
-                    {products.map((p, i) => (
-                      <div key={p.id} className="flex items-center gap-2 px-3 py-2.5 text-sm hover:bg-surface/80">
-                        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-surface text-[11px] text-subtext ring-1 ring-line">
-                          {i + 1}
-                        </span>
+                    {products.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80">
                         <Thumb url={p.images?.[0] ?? null} tone="accent" empty="package" />
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium text-primary">{p.name_ar}</div>
@@ -716,6 +689,54 @@ function TaxonomyBrowser() {
   );
 }
 
+function TaxonomyListRow({
+  url,
+  name,
+  code,
+  active,
+  onOpen,
+  onToggle,
+  onEdit,
+}: {
+  url: string | null;
+  name: string;
+  code: string | null;
+  active: boolean;
+  onOpen: () => void;
+  onToggle: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 hover:bg-surface/80">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-0.5 text-start"
+      >
+        <Thumb url={url} tone="navy" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-primary">{name}</span>
+          {!!code && (
+            <span className="block truncate text-xs text-subtext" dir="ltr">
+              {code}
+            </span>
+          )}
+        </span>
+        <ChevronLeft size={16} className="shrink-0 text-subtext" />
+      </button>
+      <Toggle checked={active} onChange={onToggle} />
+      <button
+        type="button"
+        className="rounded-lg p-2 text-subtext hover:bg-white hover:text-primary"
+        onClick={onEdit}
+        title="تعديل"
+      >
+        <Pencil size={15} />
+      </button>
+    </div>
+  );
+}
+
 function Thumb({
   url,
   tone,
@@ -739,7 +760,7 @@ function Thumb({
   );
 }
 
-/** بلاطة التخصص/الفرع زي الموبايل: الصورة كاملة بدون قص، والاسم في شريط كحلي لوحده. */
+/** معاينة شكل البلاطة في التطبيق — تظهر في نافذة التعديل فقط. */
 function TaxonomyTile({ url, label }: { url: string | null; label: string }) {
   return (
     <span className="flex size-24 shrink-0 flex-col overflow-hidden rounded-lg bg-white ring-1 ring-black/10">
@@ -1195,7 +1216,7 @@ function TaxonomyProductModal({
               onChange={(e) => setForm({ ...form, source_code: e.target.value })}
             />
           </Field>
-          <Field label="SKU" hint="يتولد تلقائيًا ويظهر في التطبيق">
+          <Field label="SKU" hint="يتولد تلقائيًا — حرف و 6 أرقام، يظهر في التطبيق">
             <Input dir="ltr" value={displaySku} readOnly className="bg-surface" />
           </Field>
         </div>

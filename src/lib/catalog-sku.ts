@@ -1,4 +1,4 @@
-/** كود الإكسل خاص بالأدمن. الـ SKU المعروض في التطبيق يتولد منه ولا يساويه. */
+/** كود الإكسل خاص بالأدمن. الـ SKU المعروض في التطبيق: حرف + 6 أرقام. */
 export function skuFromSourceCode(code: string): string {
   const normalized = code.trim();
   if (!normalized) throw new Error('الكود مطلوب');
@@ -8,5 +8,7 @@ export function skuFromSourceCode(code: string): string {
     hash ^= BigInt(byte);
     hash = (hash * 0x100000001b3n) & 0xffffffffffffffffn;
   }
-  return `BS-${hash.toString(16).toUpperCase().padStart(16, '0')}`;
+  const letter = String.fromCharCode(65 + Number(hash % 26n));
+  const digits = Number((hash / 26n) % 1_000_000n).toString().padStart(6, '0');
+  return `${letter}${digits}`;
 }

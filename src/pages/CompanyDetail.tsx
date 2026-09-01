@@ -6,6 +6,7 @@ import { ArrowRight, Package } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { setCommission as setCompanyCommission } from '../api/accounts';
 import { PageHeader, Card, StatusChip, Money, Btn, Field, Input, Spinner, ErrorState } from '../components/ui';
+import { SellerStatsPanel, BuyerCompanyStatsPanel } from '../components/AccountStatsPanel';
 import { useToast } from '../components/Toast';
 import { fmtDate, fmtDateTime } from '../lib/format';
 import { orderStatusLabels, accountStatusLabels, labelOf } from '../lib/labels';
@@ -159,9 +160,15 @@ export default function CompanyDetail() {
         </Card>
       </div>
 
+      {c.type === 'seller' ? (
+        <SellerStatsPanel companyId={c.id} />
+      ) : (
+        <BuyerCompanyStatsPanel companyId={c.id} />
+      )}
+
       {c.type === 'seller' && (
         <Card className="mt-4 p-4">
-          <h2 className="mb-3 font-bold">كتalog المواد</h2>
+          <h2 className="mb-3 font-bold">كتالوج المواد</h2>
           <Link
             to={`/companies/${c.id}/materials`}
             className="flex items-center justify-between gap-3 rounded-lg border border-line px-4 py-3 text-sm transition-colors hover:bg-surface"

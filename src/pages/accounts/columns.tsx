@@ -40,6 +40,7 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
       key: 'name',
       header: isSeller ? 'الشركة' : 'المستخدم',
       sortKey: 'name',
+      className: 'w-[16%]',
       render: (r) => (
         <div>
           <div className="break-words font-medium">{r.name}</div>

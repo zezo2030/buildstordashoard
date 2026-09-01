@@ -76,13 +76,6 @@ export const returnDocLabels: LabelMap = {
   credit_note: { label: 'إشعار دائن', tone: 'orange' },
 };
 
-export const withdrawalStatusLabels: LabelMap = {
-  pending: { label: 'معلق', tone: 'orange' },
-  approved: { label: 'موافق عليه', tone: 'blue' },
-  rejected: { label: 'مرفوض', tone: 'red' },
-  paid: { label: 'تم التحويل', tone: 'green' },
-};
-
 export const ticketStatusLabels: LabelMap = {
   open: { label: 'مفتوحة', tone: 'orange' },
   in_progress: { label: 'قيد المعالجة', tone: 'blue' },
@@ -131,14 +124,18 @@ export function labelOf(map: LabelMap, key: string | null | undefined) {
 }
 
 /** إعدادات المنصة المعروفة — الاسم والشرح يظهران في صفحة الإعدادات بدل المفتاح الإنجليزي. */
-export const appSettingMeta: Record<string, { label: string; hint: string; kind: 'number' | 'text' | 'phone' }> = {
+export const appSettingMeta: Record<string, { label: string; hint: string; kind: 'number' | 'text' | 'phone' | 'boolean' }> = {
   return_window_days: { label: 'مدة الإرجاع (أيام)', hint: 'كم يوم يقدر المشتري يطلب إرجاع بعد التوصيل', kind: 'number' },
   default_commission_rate: { label: 'نسبة العمولة الافتراضية %', hint: 'عمولة المنصة على البائع الجديد إذا ما تحددت نسبة خاصة', kind: 'number' },
-  min_withdrawal_amount: { label: 'أقل مبلغ سحب (د.ك)', hint: 'الحد الأدنى لطلب سحب من المحفظة', kind: 'number' },
   quotation_validity_days: { label: 'صلاحية عرض السعر (أيام)', hint: 'كم يوم يفضل عرض السعر ساري قبل ما ينتهي', kind: 'number' },
   wallet_topup_min: { label: 'أقل شحن محفظة (د.ك)', hint: 'أقل مبلغ يقدر المستخدم يشحن به محفظته', kind: 'number' },
   wallet_topup_max: { label: 'أعلى شحن محفظة (د.ك)', hint: 'أعلى مبلغ شحن في العملية الواحدة', kind: 'number' },
   whatsapp_support: { label: 'رقم واتساب الدعم', hint: 'الرقم اللي بيتفتح لما المستخدم يضغط تواصل عبر واتساب', kind: 'phone' },
+  platform_seller_enabled: {
+    label: 'بائع Build Store',
+    hint: 'عند الفتح تظهر مواد الكتالوج غير المربوطة بأي شركة للعرض فقط — من غير سعر ولا شراء. الربط بشركة يخفيها من بائع Build Store فورًا',
+    kind: 'boolean',
+  },
 };
 
 export const legalSlugLabels: Record<string, string> = {

@@ -67,6 +67,22 @@ describe('planCompanyProductLink', () => {
     expect(plan.duplicateInFile.map((r) => r.rowNumber)).toEqual([3]);
   });
 
+  it('links by code even when the sheet has no product name', () => {
+    const plan = planCompanyProductLink(
+      [row({ rowNumber: 2, nameAr: '', sku: '54010112' })],
+      catalog,
+      new Set(),
+    );
+    expect(plan.toLink).toEqual([
+      expect.objectContaining({
+        rowNumber: 2,
+        productId: 'p-2',
+        sku: '54010112',
+        catalogNameAr: 'ازميل 12',
+      }),
+    ]);
+  });
+
   it('reports rows without a code and ignores blank rows', () => {
     const plan = planCompanyProductLink(
       [

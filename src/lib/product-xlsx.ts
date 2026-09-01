@@ -1,4 +1,4 @@
-import { unzipSync } from 'fflate';
+import { strToU8, unzipSync, zipSync } from 'fflate';
 import { skuFromSourceCode } from './catalog-sku';
 
 export type ParsedProductImage = {
@@ -27,19 +27,47 @@ export type ImportPlan = {
   skippedInvalid: { rowNumber: number; reason: ImportSkipReason }[];
 };
 
+export const PRODUCT_XLSX_HEADERS = {
+  nameAr: 'Product Name',
+  originCountry: 'Made In',
+  sku: 'Code',
+  descriptionAr: 'Description',
+  image: 'Image',
+} as const;
+
+export const PRODUCT_XLSX_TEMPLATE_FILENAME = 'buildstore-products-template.xlsx';
+export const CODE_COLUMN_XLSX_TEMPLATE_FILENAME = 'buildstore-link-codes-template.xlsx';
+
+const HEADER_ORDER = [
+  PRODUCT_XLSX_HEADERS.nameAr,
+  PRODUCT_XLSX_HEADERS.originCountry,
+  PRODUCT_XLSX_HEADERS.sku,
+  PRODUCT_XLSX_HEADERS.descriptionAr,
+  PRODUCT_XLSX_HEADERS.image,
+] as const;
+
 const REQUIRED_HEADERS = {
-  'product name': 'nameAr',
-  'made in': 'originCountry',
-  code: 'sku',
-  description: 'descriptionAr',
-  image: 'image',
+  [PRODUCT_XLSX_HEADERS.nameAr.toLowerCase()]: 'nameAr',
+  [PRODUCT_XLSX_HEADERS.originCountry.toLowerCase()]: 'originCountry',
+  [PRODUCT_XLSX_HEADERS.sku.toLowerCase()]: 'sku',
+  [PRODUCT_XLSX_HEADERS.descriptionAr.toLowerCase()]: 'descriptionAr',
+  [PRODUCT_XLSX_HEADERS.image.toLowerCase()]: 'image',
 } as const;
 
 type FieldKey = (typeof REQUIRED_HEADERS)[keyof typeof REQUIRED_HEADERS];
 
+export type ProductXlsxTemplateRow = {
+  nameAr?: string;
+  originCountry?: string;
+  sku?: string;
+  descriptionAr?: string;
+};
+
 const BAD_FILE = 'ملف Excel غير صالح — ارفع ملف xlsx مطابق للنموذج';
 const BAD_HEADERS =
-  'ملف Excel غير مطابق للنموذج — الأعمدة المطلوبة: Product Name, Made In, Code, Description, Image';
+  `ملف Excel غير مطابق للنموذج — الأعمدة المطلوبة: ${HEADER_ORDER.join(', ')}`;
+const BAD_CODE_HEADER = 'ملف Excel غير مطابق للنموذج — العمود المطلوب: Code';
+const CODE_HEADER_ALIASES = new Set(['code', 'sku', 'كود']);
 
 export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<string>): ImportPlan {
   const seen = new Set([...existingSkus].map((s) => s.trim()));
@@ -82,6 +110,144 @@ export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<st
   return { toInsert, skippedDuplicate, skippedInvalid };
 }
 
+export function buildProductXlsxTemplate(sampleRows: ProductXlsxTemplateRow[] = []): Uint8Array {
+  const rows = sampleRows.length > 0 ? sampleRows : [{}, {}, {}];
+  return buildXlsxWorkbook(
+    'Products',
+    HEADER_ORDER,
+    rows.map((row) => [row.nameAr ?? '', row.originCountry ?? '', row.sku ?? '', row.descriptionAr ?? '', '']),
+    [36, 14, 18, 36, 16],
+  );
+}
+
+export function buildCodeColumnXlsxTemplate(codes: string[] = []): Uint8Array {
+  const rows = codes.length > 0 ? codes.map((sku) => [sku]) : [[''], [''], ['']];
+  return buildXlsxWorkbook('Codes', [PRODUCT_XLSX_HEADERS.sku], rows, [22]);
+}
+
+export function downloadProductXlsxTemplate() {
+  downloadXlsx(buildProductXlsxTemplate(), PRODUCT_XLSX_TEMPLATE_FILENAME);
+}
+
+export function downloadCodeColumnXlsxTemplate() {
+  downloadXlsx(buildCodeColumnXlsxTemplate(), CODE_COLUMN_XLSX_TEMPLATE_FILENAME);
+}
+
+function downloadXlsx(bytes: Uint8Array, filename: string) {
+  const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const blob = new Blob([copy], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildXlsxWorkbook(
+  sheetName: string,
+  headers: readonly string[],
+  dataRows: string[][],
+  colWidths: number[],
+): Uint8Array {
+  const headerCells = headers.map((label, i) => inlineCell(cellRef(i, 1), label, 1)).join('');
+  const body = dataRows.map((row, idx) => {
+    const r = idx + 2;
+    return `<row r="${r}">${headers.map((_, i) => inlineCell(cellRef(i, r), row[i] ?? '')).join('')}</row>`;
+  }).join('');
+  const cols = colWidths.map((width, i) =>
+    `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`,
+  ).join('');
+
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews>
+    <sheetView workbookViewId="0">
+      <pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>
+    </sheetView>
+  </sheetViews>
+  <cols>${cols}</cols>
+  <sheetData>
+    <row r="1">${headerCells}</row>
+    ${body}
+  </sheetData>
+</worksheet>`;
+
+  return zipSync({
+    '[Content_Types].xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`),
+    '_rels/.rels': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`),
+    'xl/workbook.xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    <sheet name="${escapeXml(sheetName)}" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>`),
+    'xl/_rels/workbook.xml.rels': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`),
+    'xl/styles.xml': strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="2">
+    <font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
+    <font><b/><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/></font>
+  </fonts>
+  <fills count="2">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+  </fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="2">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+  </cellXfs>
+</styleSheet>`),
+    'xl/worksheets/sheet1.xml': strToU8(sheet),
+  });
+}
+
+function inlineCell(ref: string, text: string, style?: number): string {
+  const sAttr = style != null ? ` s="${style}"` : '';
+  return `<c r="${ref}" t="inlineStr"${sAttr}><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+}
+
+function cellRef(colIndex: number, row: number): string {
+  return `${colLetter(colIndex)}${row}`;
+}
+
+function colLetter(index: number): string {
+  let n = index + 1;
+  let s = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export async function parseProductXlsx(data: Uint8Array | ArrayBuffer): Promise<{ rows: ParsedProductRow[] }> {
   const files = unzipXlsx(asBytes(data));
   const strings = parseSharedStrings(readText(files, 'xl/sharedStrings.xml') ?? '');
@@ -118,6 +284,44 @@ export async function parseProductXlsx(data: Uint8Array | ArrayBuffer): Promise<
   }
 
   return { rows };
+}
+
+export async function parseCodeColumnXlsx(data: Uint8Array | ArrayBuffer): Promise<{ rows: ParsedProductRow[] }> {
+  const files = unzipXlsx(asBytes(data));
+  const strings = parseSharedStrings(readText(files, 'xl/sharedStrings.xml') ?? '');
+  const sheetPath = findWorksheetPath(files);
+  const sheetXml = readText(files, sheetPath);
+  if (!sheetXml) throw new Error(BAD_FILE);
+
+  const cells = parseCells(sheetXml, strings);
+  const headerRow = cells.get(1);
+  if (!headerRow) throw new Error(BAD_CODE_HEADER);
+
+  const skuCol = findCodeColumn(headerRow);
+  if (skuCol == null) throw new Error(BAD_CODE_HEADER);
+
+  const rows: ParsedProductRow[] = [];
+  for (const rowNumber of [...cells.keys()].sort((a, b) => a - b)) {
+    if (rowNumber <= 1) continue;
+    const sku = (cells.get(rowNumber)?.get(skuCol) ?? '').trim();
+    if (!sku) continue;
+    rows.push({
+      rowNumber,
+      nameAr: '',
+      sku,
+      originCountry: null,
+      descriptionAr: null,
+      image: null,
+    });
+  }
+  return { rows };
+}
+
+function findCodeColumn(headerRow: Map<number, string>): number | null {
+  for (const [col, raw] of headerRow) {
+    if (CODE_HEADER_ALIASES.has(raw.trim().toLowerCase())) return col;
+  }
+  return null;
 }
 
 function asBytes(data: Uint8Array | ArrayBuffer): Uint8Array {

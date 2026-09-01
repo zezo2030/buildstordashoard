@@ -10,6 +10,7 @@ import { useAdmin } from '../components/Guard';
 import {
   PageHeader, Card, StatusChip, Money, Btn, Field, Input, Textarea, Spinner, ErrorState,
 } from '../components/ui';
+import { BuyerStatsPanel } from '../components/AccountStatsPanel';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { fmtDate, fmtDateTime } from '../lib/format';
@@ -217,6 +218,10 @@ export default function UserDetail() {
           )}
         </Card>
       </div>
+
+      {(p.role === 'individual_buyer' || p.role === 'company_buyer') && (
+        <BuyerStatsPanel profileId={p.id} />
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card className="p-4">

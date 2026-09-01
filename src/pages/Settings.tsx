@@ -1,4 +1,4 @@
-// الإعدادات — أرقام المنصة (عمولة، سحب، إرجاع…) + أسباب الإرجاع اللي بتظهر للمشتري.
+// الإعدادات — أرقام المنصة (عمولة، إرجاع…) + أسباب الإرجاع اللي بتظهر للمشتري.
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
@@ -16,7 +16,13 @@ function displayValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function parseSettingValue(raw: string, kind: 'number' | 'text' | 'phone'): unknown {
+function asBoolean(value: unknown): boolean {
+  if (value === true) return true;
+  if (typeof value === 'string') return value === 'true' || value === '1';
+  return false;
+}
+
+function parseSettingValue(raw: string, kind: 'number' | 'text' | 'phone' | 'boolean'): unknown {
   const trimmed = raw.trim();
   if (kind === 'number') {
     const n = Number(trimmed);
@@ -57,6 +63,21 @@ function AppSettings() {
     },
   });
 
+  const toggleBool = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: boolean }) => {
+      const { error } = await supabase
+        .from('app_settings')
+        .update({ value: value as never, updated_at: new Date().toISOString() })
+        .eq('key', key);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم حفظ الإعداد');
+      qc.invalidateQueries({ queryKey: ['app-settings'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
   const save = useMutation({
     mutationFn: async () => {
       if (!editing) return;
@@ -76,13 +97,13 @@ function AppSettings() {
     onError: (e) => toast('error', (e as Error).message),
   });
 
-  const rows = (data ?? []).filter((s) => s.key !== 'supported_locales');
+  const rows = (data ?? []).filter((s) => s.key !== 'supported_locales' && s.key !== 'min_withdrawal_amount');
 
   return (
     <Card className="p-5">
       <h2 className="font-bold">إعدادات المنصة</h2>
       <p className="mt-1 mb-3 text-sm text-subtext">
-        غيّر الرقم أو النص هنا، والتطبيق بياخده مباشرة: مدة الإرجاع، العمولة، حد السحب، ورقم واتساب الدعم.
+        غيّر الرقم أو النص هنا، والتطبيق بياخده مباشرة: مدة الإرجاع، العمولة، حدود الشحن، ورقم واتساب الدعم.
       </p>
       {isLoading ? (
         <div className="py-6 text-center text-sm text-subtext">جارٍ التحميل…</div>
@@ -97,9 +118,19 @@ function AppSettings() {
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{meta?.label ?? s.key}</div>
                   {meta?.hint && <div className="mt-0.5 text-xs text-subtext">{meta.hint}</div>}
-                  <div className="mt-1 font-semibold text-accent" dir="ltr">{displayValue(s.value)}</div>
+                  {meta?.kind !== 'boolean' && (
+                    <div className="mt-1 font-semibold text-accent" dir="ltr">{displayValue(s.value)}</div>
+                  )}
                 </div>
                 <div className="shrink-0 text-end">
+                  {meta?.kind === 'boolean' ? (
+                    <Toggle
+                      checked={asBoolean(s.value)}
+                      onChange={(v) => toggleBool.mutate({ key: s.key, value: v })}
+                      disabled={toggleBool.isPending}
+                    />
+                  ) : (
+                    <>
                   <div className="mb-1 text-[11px] text-subtext">{fmtDateTime(s.updated_at)}</div>
                   <Btn
                     variant="ghost"
@@ -110,6 +141,8 @@ function AppSettings() {
                   >
                     تعديل
                   </Btn>
+                    </>
+                  )}
                 </div>
               </div>
             );

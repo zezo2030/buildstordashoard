@@ -1,11 +1,11 @@
-// ربط منتجات الكتالوج الموجودة مسبقًا بشركة عبر رفع شيت Excel — بدون إنشاء منتجات جديدة.
-// نفس نموذج الشيت المستخدم في استيراد المنتجات، والعمود الفعلي هنا هو Code (SKU).
+// ربط منتجات الكتالوج الموجودة مسبقًا بشركة عبر رفع شيت Excel — بالكود فقط.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Download } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import {
-  parseProductXlsx,
+  downloadCodeColumnXlsxTemplate,
+  parseCodeColumnXlsx,
   type ParsedProductRow,
 } from '../lib/product-xlsx';
 import {
@@ -13,29 +13,10 @@ import {
   type CatalogMatch,
   type CompanyLinkPlan,
 } from '../lib/company-link-xlsx';
+import { adminAssignCompanyProducts } from '../api/company-products';
 import { Modal } from './Modal';
 import { useToast } from './Toast';
-import { Btn, Field, Input, Toggle } from './ui';
-
-type Defaults = {
-  price: string;
-  compare_at_price: string;
-  origin_country: string;
-  min_order_qty: string;
-  stock_qty: string;
-  track_stock: boolean;
-  is_active: boolean;
-};
-
-const defaultDefaults = (): Defaults => ({
-  price: '',
-  compare_at_price: '',
-  origin_country: '',
-  min_order_qty: '1',
-  stock_qty: '100',
-  track_stock: true,
-  is_active: true,
-});
+import { Btn, Field } from './ui';
 
 const CHUNK = 100;
 
@@ -60,7 +41,6 @@ export function LinkCompanyProductsModal({
   const [parsing, setParsing] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [plan, setPlan] = useState<CompanyLinkPlan | null>(null);
-  const [defaults, setDefaults] = useState<Defaults>(defaultDefaults);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   useEffect(() => {
@@ -70,7 +50,6 @@ export function LinkCompanyProductsModal({
     setParsing(false);
     setDragOver(false);
     setPlan(null);
-    setDefaults(defaultDefaults());
     setProgress(null);
     if (fileRef.current) fileRef.current.value = '';
   }, [open]);
@@ -86,7 +65,7 @@ export function LinkCompanyProductsModal({
     setPlan(null);
     setParsing(true);
     try {
-      const parsed = await parseProductXlsx(new Uint8Array(await file.arrayBuffer()));
+      const parsed = await parseCodeColumnXlsx(new Uint8Array(await file.arrayBuffer()));
       setPlan(await buildLinkPlan(companyId, parsed.rows));
     } catch (err) {
       setParseError((err as Error).message);
@@ -101,43 +80,13 @@ export function LinkCompanyProductsModal({
     if (file) void ingestFile(file);
   }
 
-  const defaultsInvalid = validateDefaults(defaults);
-
   const linkRows = useMutation({
     mutationFn: async () => {
       if (!plan || plan.toLink.length === 0) throw new Error('لا توجد منتجات لربطها');
-      if (defaultsInvalid) throw new Error(defaultsInvalid);
-
-      const price = Number(defaults.price);
-      const compareAt = defaults.compare_at_price.trim() ? Number(defaults.compare_at_price) : null;
-      const minOrder = Number(defaults.min_order_qty);
-      const fallbackOrigin = defaults.origin_country.trim();
-      const stockQty = defaults.track_stock && defaults.stock_qty.trim()
-        ? Number(defaults.stock_qty)
-        : null;
-
-      const rows = plan.toLink.map((r) => ({
-        seller_company_id: companyId,
-        product_id: r.productId,
-        unit_id: r.unitId,
-        price,
-        compare_at_price: compareAt,
-        origin_country: r.originCountry?.trim() || fallbackOrigin || null,
-        min_order_qty: minOrder,
-        stock_qty: stockQty,
-        track_stock: defaults.track_stock,
-        is_active: defaults.is_active,
-      }));
-
-      setProgress({ done: 0, total: rows.length });
-      let linked = 0;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const part = rows.slice(i, i + CHUNK);
-        const { error } = await supabase.from('seller_products').insert(part);
-        if (error) throw new Error(arError(error));
-        linked += part.length;
-        setProgress({ done: linked, total: rows.length });
-      }
+      const ids = [...new Set(plan.toLink.map((r) => r.productId))];
+      setProgress({ done: 0, total: ids.length });
+      const linked = await adminAssignCompanyProducts(companyId, ids);
+      setProgress({ done: ids.length, total: ids.length });
       return linked;
     },
     onSuccess: (linked) => {
@@ -150,9 +99,10 @@ export function LinkCompanyProductsModal({
         'success',
         skipped > 0
           ? `تم ربط ${linked} منتج بـ${companyName} — تم تجاهل ${skipped} صف`
-          : `تم ربط ${linked} منتج بـ${companyName}`,
+          : `تم ربط ${linked} منتج بـ${companyName} — الأسعار من الشركة`,
       );
       qc.invalidateQueries({ queryKey: ['company-seller-products', companyId] });
+      qc.invalidateQueries({ queryKey: ['company-assigned-product-ids', companyId] });
       qc.invalidateQueries({ queryKey: ['company', companyId] });
       onDone();
     },
@@ -169,38 +119,15 @@ export function LinkCompanyProductsModal({
     <Modal title="ربط منتجات من Excel" open={open} onClose={onClose} wide>
       <div className="space-y-4">
         <p className="text-sm text-subtext">
-          نفس نموذج الشيت: Product Name, Made In, Code, Description, Image — العمود المؤثّر هو
+          عمود واحد:
           <span dir="ltr" className="mx-1 font-medium">Code</span>
-          (SKU). لا يُنشأ أي منتج جديد: يُربط كل SKU موجود في الكتالوج النشط بـ{companyName}.
+          — حط كود المادة الموجود في الكتالوج، سطر لكل مادة. لا يُنشأ أي منتج جديد ولا يُوضع سعر: يُربط كل كود موجود في الكتالوج النشط بـ{companyName}، والشركة تسعّر من التطبيق.
         </p>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Field label="السعر الافتراضي (د.ك)">
-            <Input dir="ltr" type="number" step="0.001" min="0" value={defaults.price} onChange={(e) => setDefaults({ ...defaults, price: e.target.value })} />
-          </Field>
-          <Field label="سعر قبل الخصم">
-            <Input dir="ltr" type="number" step="0.001" min="0" value={defaults.compare_at_price} onChange={(e) => setDefaults({ ...defaults, compare_at_price: e.target.value })} />
-          </Field>
-          <Field label="المنشأ الاحتياطي" hint="يُستخدم لو خلت خانة Made In">
-            <Input value={defaults.origin_country} onChange={(e) => setDefaults({ ...defaults, origin_country: e.target.value })} placeholder="سعودي" />
-          </Field>
-          <Field label="حد أدنى">
-            <Input dir="ltr" type="number" min="1" value={defaults.min_order_qty} onChange={(e) => setDefaults({ ...defaults, min_order_qty: e.target.value })} />
-          </Field>
-          <Field label="المخزون">
-            <Input dir="ltr" type="number" min="0" value={defaults.stock_qty} disabled={!defaults.track_stock} onChange={(e) => setDefaults({ ...defaults, stock_qty: e.target.value })} />
-          </Field>
-          <div className="flex flex-col justify-end gap-2 pb-1">
-            <label className="flex items-center gap-2 text-sm">
-              <Toggle checked={defaults.track_stock} onChange={() => setDefaults({ ...defaults, track_stock: !defaults.track_stock })} />
-              تتبّع المخزون
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Toggle checked={defaults.is_active} onChange={() => setDefaults({ ...defaults, is_active: !defaults.is_active })} />
-              نشط
-            </label>
-          </div>
-        </div>
+        <Btn type="button" variant="ghost" onClick={downloadCodeColumnXlsxTemplate}>
+          <Download size={16} />
+          تحميل نموذج Excel
+        </Btn>
 
         <Field label="ملف Excel">
           <input
@@ -253,7 +180,6 @@ export function LinkCompanyProductsModal({
                       <div className="truncate font-medium">{r.catalogNameAr}</div>
                       <div className="text-xs text-subtext" dir="ltr">{r.sku}</div>
                     </div>
-                    {r.originCountry && <span className="text-xs text-subtext">{r.originCountry}</span>}
                   </div>
                 ))}
               </div>
@@ -276,7 +202,7 @@ export function LinkCompanyProductsModal({
           <Btn
             variant="accent"
             busy={linkRows.isPending}
-            disabled={parsing || !plan || plan.toLink.length === 0 || !!defaultsInvalid}
+            disabled={parsing || !plan || plan.toLink.length === 0}
             onClick={() => linkRows.mutate()}
           >
             ربط المنتجات
@@ -294,22 +220,6 @@ function Stat({ label, value }: { label: string; value: number }) {
       <div className="font-medium">{value}</div>
     </div>
   );
-}
-
-function validateDefaults(d: Defaults): string | null {
-  const price = Number(d.price);
-  if (d.price.trim() === '' || !Number.isFinite(price) || price < 0) return 'أدخل سعرًا افتراضيًا صالحًا';
-  const compareAt = d.compare_at_price.trim() ? Number(d.compare_at_price) : null;
-  if (compareAt != null && (!Number.isFinite(compareAt) || compareAt < price)) {
-    return 'سعر المقارنة يجب أن يكون ≥ السعر';
-  }
-  const minOrder = Number(d.min_order_qty);
-  if (!Number.isFinite(minOrder) || minOrder <= 0) return 'الحد الأدنى غير صالح';
-  const stockQty = d.track_stock && d.stock_qty.trim() ? Number(d.stock_qty) : null;
-  if (d.track_stock && stockQty != null && (!Number.isFinite(stockQty) || stockQty < 0)) {
-    return 'المخزون غير صالح';
-  }
-  return null;
 }
 
 async function buildLinkPlan(companyId: string, rows: ParsedProductRow[]): Promise<CompanyLinkPlan> {

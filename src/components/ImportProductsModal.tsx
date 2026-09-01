@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Download } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { imageBytesToFile, imageBytesToObjectUrl, uploadProductImage } from '../lib/product-image';
-import { parseProductXlsx, planProductImport, type ImportPlan, type PlannedProductRow } from '../lib/product-xlsx';
+import {
+  downloadProductXlsxTemplate,
+  parseProductXlsx,
+  planProductImport,
+  type ImportPlan,
+  type PlannedProductRow,
+} from '../lib/product-xlsx';
 import { skuFromSourceCode } from '../lib/catalog-sku';
 import { useAdmin } from './Guard';
 import { Modal } from './Modal';
@@ -192,8 +198,12 @@ export function ImportProductsModal({
     <Modal title="رفع منتجات من Excel" open={open} onClose={onClose} wide>
       <div className="space-y-4">
         <p className="text-sm text-subtext">
-          نفس نموذج الشيت: Product Name, Made In, Code, Description, Image. عمود Code خاص بيك، والـ SKU بيتولد منه للعرض في التطبيق. الكود الموجود مسبقاً لا يُضاف.
+          حمّل النموذج وعبّي الصفوف: Product Name, Made In, Code, Description, Image. عمود Code خاص بيك، والـ SKU بيتولد منه للعرض في التطبيق. الكود الموجود مسبقاً لا يُضاف.
         </p>
+        <Btn type="button" variant="ghost" onClick={downloadProductXlsxTemplate}>
+          <Download size={16} />
+          تحميل نموذج Excel
+        </Btn>
         {locked ? (
           <div className="grid grid-cols-2 gap-3">
             <Field label="سيُضاف في">

@@ -4,7 +4,6 @@ import { supabase, arError } from '../lib/supabase';
 
 export type OverviewCounts = {
   openProductRequests: number;
-  pendingWithdrawals: number;
   openTickets: number;
   productsTotal: number;
   productsActive: number;
@@ -41,7 +40,6 @@ export async function fetchOverviewCounts(): Promise<OverviewCounts> {
   const all = (r.orders_all ?? {}) as Record<string, unknown>;
   return {
     openProductRequests: num(r.open_product_requests),
-    pendingWithdrawals: num(r.pending_withdrawals),
     openTickets: num(r.open_tickets),
     productsTotal: num(r.products_total),
     productsActive: num(r.products_active),

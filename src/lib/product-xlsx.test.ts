@@ -3,7 +3,14 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { skuFromSourceCode } from './catalog-sku';
-import { parseProductXlsx, planProductImport, type ParsedProductRow } from './product-xlsx';
+import {
+  buildCodeColumnXlsxTemplate,
+  buildProductXlsxTemplate,
+  parseCodeColumnXlsx,
+  parseProductXlsx,
+  planProductImport,
+  type ParsedProductRow,
+} from './product-xlsx';
 
 const milstonExport = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -111,5 +118,50 @@ describe('parseProductXlsx', () => {
 
   it('rejects a file that is not a workbook', async () => {
     await expect(parseProductXlsx(new Uint8Array([1, 2, 3]))).rejects.toThrow(/Excel|xlsx|نموذج/i);
+  });
+});
+
+describe('buildProductXlsxTemplate', () => {
+  it('produces a workbook the importer accepts, with no data rows', async () => {
+    const parsed = await parseProductXlsx(buildProductXlsxTemplate());
+    expect(parsed.rows).toEqual([]);
+  });
+
+  it('round-trips sample rows including Arabic text', async () => {
+    const parsed = await parseProductXlsx(buildProductXlsxTemplate([
+      { nameAr: 'ازميل 10', originCountry: 'CHN', sku: '54010111', descriptionAr: 'وصف' },
+    ]));
+    expect(parsed.rows).toEqual([
+      expect.objectContaining({
+        rowNumber: 2,
+        nameAr: 'ازميل 10',
+        originCountry: 'CHN',
+        sku: '54010111',
+        descriptionAr: 'وصف',
+        image: null,
+      }),
+    ]);
+  });
+});
+
+describe('parseCodeColumnXlsx', () => {
+  it('reads codes from a Code-only sheet', async () => {
+    const parsed = await parseCodeColumnXlsx(buildCodeColumnXlsxTemplate(['54010111', '54010112']));
+    expect(parsed.rows.map((r) => ({ rowNumber: r.rowNumber, sku: r.sku }))).toEqual([
+      { rowNumber: 2, sku: '54010111' },
+      { rowNumber: 3, sku: '54010112' },
+    ]);
+  });
+
+  it('reads Code from the full product import sheet and ignores the other columns', async () => {
+    const parsed = await parseCodeColumnXlsx(buildProductXlsxTemplate([
+      { nameAr: 'ازميل 10', originCountry: 'CHN', sku: '54010111', descriptionAr: 'وصف' },
+    ]));
+    expect(parsed.rows.map((r) => r.sku)).toEqual(['54010111']);
+  });
+
+  it('is rejected by the product importer because that still needs the full header row', async () => {
+    const bytes = buildCodeColumnXlsxTemplate(['54010111']);
+    await expect(parseProductXlsx(bytes)).rejects.toThrow(/Product Name|Made In|نموذج/i);
   });
 });

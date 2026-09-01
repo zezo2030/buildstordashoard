@@ -1937,6 +1937,39 @@ export type Database = {
           },
         ]
       }
+      product_specialties: {
+        Row: {
+          created_at: string
+          product_id: string
+          specialty_id: string
+        }
+        Insert: {
+          created_at?: string
+          product_id: string
+          specialty_id: string
+        }
+        Update: {
+          created_at?: string
+          product_id?: string
+          specialty_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_specialties_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_specialties_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           attributes: Json
@@ -3419,6 +3452,10 @@ export type Database = {
         Args: { p_from?: string; p_kind: string; p_to?: string }
         Returns: Json
       }
+      admin_buyer_dashboard: {
+        Args: { p_profile_id: string }
+        Returns: Json
+      }
       admin_activate_seller: {
         Args: {
           p_commercial_register?: string
@@ -3469,6 +3506,10 @@ export type Database = {
           p_phone?: string
         }
         Returns: string
+      }
+      admin_assign_company_products: {
+        Args: { p_company_id: string; p_product_ids: string[] }
+        Returns: number
       }
       admin_dashboard_stats: { Args: never; Returns: Json }
       admin_decide_product_request: {
@@ -3575,6 +3616,10 @@ export type Database = {
       }
       admin_sales_range: {
         Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_seller_dashboard: {
+        Args: { p_company_id: string }
         Returns: Json
       }
       admin_sales_series: {
@@ -3811,6 +3856,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      buyer_visible_product_ids: { Args: never; Returns: string[] }
       cancel_order: {
         Args: { p_order_id: string; p_reason?: string }
         Returns: {
