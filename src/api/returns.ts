@@ -27,6 +27,7 @@ export type ReturnsStats = {
   nBuyers: number;
   nSellers: number;
   refund: number;
+  feesRefunded: number;
 };
 
 export type ReturnsQuery = {
@@ -89,6 +90,7 @@ export async function fetchReturnsStats(from: string | null, to: string | null):
     nBuyers: num(r.n_buyers),
     nSellers: num(r.n_sellers),
     refund: num(r.refund),
+    feesRefunded: num(r.fees_refunded),
   };
 }
 

@@ -28,16 +28,19 @@ const PRESETS: [string, number][] = [
   ['آخر ٣٠ يوم', 30],
 ];
 
-export function DateRangePicker({ value, onChange, className = '', presets = false }: {
+export function DateRangePicker({ value, onChange, className = '', presets = false, allowAll = false }: {
   value: DateRange;
   onChange: (v: DateRange) => void;
   className?: string;
   presets?: boolean;
+  /** زرار «كل الفترات» — بيفضّي الطرفين، والـAPI بيحوّل '' لـ null (بدون حد). */
+  allowAll?: boolean;
 }) {
+  const isAll = value.from === '' && value.to === '';
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
       {presets && PRESETS.map(([label, days]) => {
-        const active = value.to === todayISO() && value.from === daysAgoISO(days);
+        const active = !isAll && value.to === todayISO() && value.from === daysAgoISO(days);
         return (
           <button
             key={days}
@@ -51,6 +54,17 @@ export function DateRangePicker({ value, onChange, className = '', presets = fal
           </button>
         );
       })}
+      {allowAll && (
+        <button
+          type="button"
+          onClick={() => onChange({ from: '', to: '' })}
+          className={`h-8 rounded-lg border px-2 text-xs transition-colors ${
+            isAll ? 'border-accent bg-accent/10 text-accent' : 'border-line text-subtext hover:text-primary'
+          }`}
+        >
+          كل الفترات
+        </button>
+      )}
       <span className="text-xs text-subtext">من</span>
       <input
         type="date"

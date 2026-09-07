@@ -1,9 +1,10 @@
 // الإعدادات — أرقام المنصة (عمولة، إرجاع…) + أسباب الإرجاع اللي بتظهر للمشتري.
 import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
 import { PageHeader, Btn, Field, Input, Card, Toggle } from '../components/ui';
-import { Modal } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { fmtDateTime } from '../lib/format';
 import { appSettingMeta } from '../lib/labels';
@@ -97,7 +98,10 @@ function AppSettings() {
     onError: (e) => toast('error', (e as Error).message),
   });
 
-  const rows = (data ?? []).filter((s) => s.key !== 'supported_locales' && s.key !== 'min_withdrawal_amount');
+  // `default_commission_rate` اتشال من هنا: الرسوم بقت لكل حساب على حدة في
+  // قسم «المال» (نسبة أو اشتراك بمدة)، فرقم افتراضي عام هنا بيضلّل.
+  const HIDDEN_KEYS = ['supported_locales', 'min_withdrawal_amount', 'default_commission_rate'];
+  const rows = (data ?? []).filter((s) => !HIDDEN_KEYS.includes(s.key));
 
   return (
     <Card className="p-5">
@@ -178,6 +182,7 @@ function ReturnReasons() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState<{ code: string; label_ar: string; isNew?: boolean } | null>(null);
+  const [deleting, setDeleting] = useState<{ code: string; label_ar: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['return-reasons'],
@@ -194,6 +199,21 @@ function ReturnReasons() {
       if (error) throw new Error(arError(error));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['return-reasons'] }),
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // الحذف بيمر على RPC عشان يرفض السبب المستخدم في سند إرجاع قايم — من غير
+  // كده كان السند القديم هيفضل بكود سبب مالوش صف يترجم منه.
+  const remove = useMutation({
+    mutationFn: async (code: string) => {
+      const { error } = await supabase.rpc('admin_delete_return_reason', { p_code: code });
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم حذف السبب');
+      setDeleting(null);
+      qc.invalidateQueries({ queryKey: ['return-reasons'] });
+    },
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -223,7 +243,8 @@ function ReturnReasons() {
         <Btn variant="accent" onClick={() => setEditing({ code: '', label_ar: '', isNew: true })}>+ إضافة</Btn>
       </div>
       <p className="mb-3 text-sm text-subtext">
-        القائمة اللي المشتري بيختار منها سبب الإرجاع. عطّل السبب لو مش عايزه يظهر من غير ما تمسحه.
+        القائمة اللي المشتري بيختار منها سبب الإرجاع. عطّله لو مش عايزه يظهر مؤقتًا، أو احذفه
+        نهائيًا — السبب المستخدم في سند إرجاع قايم مايتحذفش.
       </p>
       {isLoading ? (
         <div className="py-6 text-center text-sm text-subtext">جارٍ التحميل…</div>
@@ -234,10 +255,30 @@ function ReturnReasons() {
               <span className="flex-1 font-medium">{r.label_ar}</span>
               <Toggle checked={r.is_active} onChange={() => toggle.mutate(r)} />
               <Btn variant="ghost" onClick={() => setEditing({ code: r.code, label_ar: r.label_ar })}>تعديل</Btn>
+              <button
+                type="button"
+                title="حذف السبب"
+                aria-label={`حذف ${r.label_ar}`}
+                className="rounded-lg p-1.5 text-danger hover:bg-red-50"
+                onClick={() => setDeleting({ code: r.code, label_ar: r.label_ar })}
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="حذف سبب إرجاع"
+        message={deleting ? `سيتم حذف «${deleting.label_ar}» نهائيًا من قائمة المشتري. متابعة؟` : null}
+        confirmLabel="حذف"
+        danger
+        busy={remove.isPending}
+        onConfirm={() => deleting && remove.mutate(deleting.code)}
+        onClose={() => setDeleting(null)}
+      />
       {editing && (
         <Modal title={editing.isNew ? 'سبب إرجاع جديد' : 'تعديل سبب إرجاع'} open onClose={() => setEditing(null)}>
           <div className="space-y-4">

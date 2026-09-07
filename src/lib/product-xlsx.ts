@@ -69,6 +69,18 @@ const BAD_HEADERS =
 const BAD_CODE_HEADER = 'ملف Excel غير مطابق للنموذج — العمود المطلوب: Code';
 const CODE_HEADER_ALIASES = new Set(['code', 'sku', 'كود']);
 
+/**
+ * القيم النايبة في ملفات الإكسل («N/A»، «-»، …) مش بيانات — لو اتخزنت بتظهر
+ * للمشتري في التطبيق كأنها منشأ أو ماركة حقيقية.
+ */
+const PLACEHOLDERS = new Set(['n/a', 'na', 'n.a', 'n.a.', '-', '—', '--', 'غير متوفر', 'لا يوجد']);
+
+export function cleanCell(v: string | null | undefined): string | null {
+  const t = (v ?? '').trim();
+  if (!t || PLACEHOLDERS.has(t.toLowerCase())) return null;
+  return t;
+}
+
 export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<string>): ImportPlan {
   const seen = new Set([...existingSkus].map((s) => s.trim()));
   const toInsert: PlannedProductRow[] = [];
@@ -78,7 +90,7 @@ export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<st
   for (const r of rows) {
     const nameAr = r.nameAr.trim();
     const sourceCode = r.sku.trim();
-    const originCountry = r.originCountry?.trim() || null;
+    const originCountry = cleanCell(r.originCountry);
     const descriptionAr = r.descriptionAr?.trim() || null;
     if (!nameAr && !sourceCode && !originCountry && !descriptionAr && !r.image) continue;
     if (!nameAr) {

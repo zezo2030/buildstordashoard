@@ -48,3 +48,17 @@ export function fmtMonthShort(v: string): string {
   const d = new Date(v);
   return `${d.getMonth() + 1}/${d.getFullYear()}`;
 }
+
+/**
+ * أرقام الكويت 8 خانات — الكود الدولي +965 مالوش لازمة في اللوحة (كل الحسابات
+ * كويتية)، فبنشيله من العرض ونسيب الرقم المحلي بس. أي رقم بكود دولي تاني
+ * بيتعرض زي ما هو عشان مايتشوّهش.
+ */
+export function localPhone(v: string | null | undefined): string {
+  const s = (v ?? '').trim();
+  if (!s) return '—';
+  const digits = s.replace(/[^\d]/g, '');
+  if (digits.length === 11 && digits.startsWith('965')) return digits.slice(3);
+  if (digits.length === 8) return digits;
+  return s;
+}

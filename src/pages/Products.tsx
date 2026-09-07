@@ -1,4 +1,6 @@
 // المنتجات (الكتالوج المشترك — SKU واحد لكل مادة) + عروض البائعين عليها.
+// المنتج ممكن يبقى في أكتر من مكان في الشجرة (`product_placements`)، والجدول
+// بيعرض مسار المكان الأساسي كامل من التخصص الرئيسي لغاية آخر فئة.
 import { useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ImagePlus, X } from 'lucide-react';
@@ -10,7 +12,9 @@ import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { ImportProductsModal } from '../components/ImportProductsModal';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
-import { linkedSpecialtyIds, specialtyLinkIds } from '../lib/product-specialties';
+import { productPathText, type PathCategory, type PathSpecialty } from '../lib/product-path';
+import { PlacementsField, savePlacements, specialtyNeedsCategory } from '../components/PlacementsField';
+import { normalizePlacements, type Placement } from '../lib/product-placements';
 
 type Row = {
   id: string;
@@ -18,16 +22,33 @@ type Row = {
   source_code: string | null;
   name_ar: string;
   brand: string | null;
-  origin_country: string | null;
   images: string[];
   is_active: boolean;
   specialty_id?: string;
-  specialty: { name_ar: string } | null;
-  category: { name_ar: string } | null;
+  category_id?: string | null;
   unit: { name_ar: string } | null;
   seller_products: { count: number }[];
-  product_specialties?: { specialty_id: string; specialties: { name_ar: string } | null }[];
+  product_placements?: { specialty_id: string; category_id: string | null }[];
 };
+
+type CatalogTree = { specialties: PathSpecialty[]; categories: PathCategory[] };
+
+/** شجرة الكتالوج كاملة — قوايم صغيرة، بتتجاب مرة وبتتشارك بين الجدول والفورم. */
+function useCatalogTree() {
+  return useQuery<CatalogTree>({
+    queryKey: ['catalog-tree'],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const [sp, cat] = await Promise.all([
+        supabase.from('specialties').select('id, name_ar').order('sort_order'),
+        supabase.from('categories').select('id, name_ar, parent_id, specialty_id').order('sort_order'),
+      ]);
+      if (sp.error) throw new Error(arError(sp.error));
+      if (cat.error) throw new Error(arError(cat.error));
+      return { specialties: sp.data ?? [], categories: (cat.data ?? []) as PathCategory[] };
+    },
+  });
+}
 
 export default function Products() {
   const qc = useQueryClient();
@@ -39,30 +60,23 @@ export default function Products() {
   const [offersFor, setOffersFor] = useState<Row | null>(null);
   const [importing, setImporting] = useState(false);
 
-  const { data: specialties } = useQuery({
-    queryKey: ['specialties-list'],
-    queryFn: async () => {
-      const { data } = await supabase.from('specialties').select('id, name_ar').order('sort_order');
-      return data ?? [];
-    },
-  });
+  const { data: tree } = useCatalogTree();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['products', search, specialty, page],
     queryFn: async () => {
       const linksSelect = specialty !== 'all'
-        ? 'product_specialties!inner (specialty_id, specialties (name_ar))'
-        : 'product_specialties (specialty_id, specialties (name_ar))';
+        ? 'product_placements!inner (specialty_id, category_id)'
+        : 'product_placements (specialty_id, category_id)';
       let q = supabase
         .from('products')
         .select(
-          `id, sku, source_code, name_ar, brand, origin_country, images, is_active, specialty_id,
-           specialty:specialties!products_specialty_id_fkey (name_ar), category:categories (name_ar), unit:units (name_ar),
-           seller_products (count), ${linksSelect}`,
+          `id, sku, source_code, name_ar, brand, images, is_active, specialty_id, category_id,
+           unit:units (name_ar), seller_products (count), ${linksSelect}`,
         )
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-      if (specialty !== 'all') q = q.eq('product_specialties.specialty_id', specialty);
+      if (specialty !== 'all') q = q.eq('product_placements.specialty_id', specialty);
       if (search.trim()) q = q.or(`name_ar.ilike.%${search.trim()}%,sku.ilike.%${search.trim()}%`);
       const { data, error } = await q;
       if (error) throw new Error(arError(error));
@@ -104,18 +118,30 @@ export default function Products() {
       ),
     },
     {
-      key: 'specialty',
-      header: 'التخصص',
+      key: 'path',
+      header: 'المسار',
+      className: 'w-[26%]',
+      // المكان الأساسي بالكامل + عدد الأماكن الزيادة، عشان الأدمن يعرف المنتج
+      // موجود فين من غير ما يفتح الفورم.
       render: (r) => {
-        const names = [...new Set(
-          (r.product_specialties ?? [])
-            .map((x) => x.specialties?.name_ar)
-            .filter((n): n is string => !!n),
-        )];
-        return names.length ? names.join('، ') : (r.specialty?.name_ar ?? '—');
+        const extra = Math.max(0, (r.product_placements?.length ?? 0) - 1);
+        return (
+          <div>
+            <div>
+              {productPathText(
+                tree?.specialties ?? [], tree?.categories ?? [],
+                r.specialty_id, r.category_id ?? null,
+              )}
+            </div>
+            {extra > 0 && (
+              <div className="mt-0.5 text-[11px] text-subtext">
+                + {extra} {extra === 1 ? 'مكان آخر' : 'أماكن أخرى'}
+              </div>
+            )}
+          </div>
+        );
       },
     },
-    { key: 'category', header: 'الفئة', render: (r) => r.category?.name_ar ?? '—' },
     { key: 'unit', header: 'الوحدة', render: (r) => r.unit?.name_ar ?? '—' },
     {
       key: 'offers',
@@ -151,7 +177,7 @@ export default function Products() {
             <Input placeholder="بحث بالاسم/SKU…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="w-56" />
             <Select value={specialty} onChange={(e) => { setSpecialty(e.target.value); setPage(0); }} className="w-44">
               <option value="all">كل التخصصات</option>
-              {(specialties ?? []).map((s) => (
+              {(tree?.specialties ?? []).map((s) => (
                 <option key={s.id} value={s.id}>{s.name_ar}</option>
               ))}
             </Select>
@@ -200,55 +226,51 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [placements, setPlacements] = useState<Placement[]>([]);
   const [form, setForm] = useState({
     source_code: product?.source_code ?? '',
     name_ar: product?.name_ar ?? '',
-    brand: product?.brand ?? '',
-    origin_country: product?.origin_country ?? '',
     image_url: product?.images?.[0] ?? '',
-    specialty_id: '',
-    extra_specialty_ids: [] as string[],
-    category_id: '',
     unit_id: '',
   });
   const generatedSku = form.source_code.trim() ? skuFromSourceCode(form.source_code) : '';
   const displaySku = product?.sku || generatedSku;
 
-  const { data: lookups } = useQuery({
-    queryKey: ['product-lookups'],
+  const { data: tree } = useCatalogTree();
+
+  const { data: units } = useQuery({
+    queryKey: ['units-list'],
+    staleTime: 5 * 60_000,
     queryFn: async () => {
-      const [sp, cat, un] = await Promise.all([
-        supabase.from('specialties').select('id, name_ar').order('sort_order'),
-        supabase.from('categories').select('id, name_ar, specialty_id, parent_id').order('sort_order'),
-        supabase.from('units').select('id, name_ar').order('code'),
-      ]);
-      return {
-        specialties: sp.data ?? [],
-        categories: (cat.data ?? []) as {
-          id: string; name_ar: string; specialty_id: string; parent_id: string | null;
-        }[],
-        units: un.data ?? [],
-      };
+      const { data, error } = await supabase.from('units').select('id, name_ar').order('code');
+      if (error) throw new Error(arError(error));
+      return data ?? [];
     },
   });
 
-  // عند التعديل: جلب قيم الربط الحالية
+  // عند التعديل: جلب الوحدة والأماكن الحالية (الأساسي الأول)
   useQuery({
     queryKey: ['product-refs', product?.id],
     enabled: !!product,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('products')
-        .select('specialty_id, category_id, unit_id, images, product_specialties (specialty_id)')
+        .select('specialty_id, category_id, unit_id, images, product_placements (specialty_id, category_id)')
         .eq('id', product!.id)
         .single();
+      if (error) throw new Error(arError(error));
       if (data) {
-        const linked = linkedSpecialtyIds(data.product_specialties);
+        const primary: Placement = {
+          specialtyId: data.specialty_id ?? '',
+          categoryId: data.category_id ?? null,
+        };
+        const rest = (data.product_placements ?? []).map((p) => ({
+          specialtyId: p.specialty_id,
+          categoryId: p.category_id,
+        }));
+        setPlacements(normalizePlacements([primary, ...rest]));
         setForm((f) => ({
           ...f,
-          specialty_id: data.specialty_id ?? '',
-          extra_specialty_ids: linked.filter((id) => id !== data.specialty_id),
-          category_id: data.category_id ?? '',
           unit_id: data.unit_id ?? '',
           image_url: data.images?.[0] ?? f.image_url,
         }));
@@ -277,36 +299,27 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
     mutationFn: async () => {
       if (!form.name_ar.trim()) throw new Error('الاسم مطلوب');
       if (!product && !form.source_code.trim()) throw new Error('الكود مطلوب');
-      if (!form.specialty_id || !form.unit_id) throw new Error('اختر التخصص والوحدة');
-      // XOR: المنتج يت ربط بورقة فقط (مستوى مفيهوش فروع)
-      if (form.category_id) {
-        const { count, error: cErr } = await supabase
-          .from('categories')
-          .select('id', { count: 'exact', head: true })
-          .eq('parent_id', form.category_id);
-        if (cErr) throw new Error(arError(cErr));
-        if ((count ?? 0) > 0) {
+      if (!form.unit_id) throw new Error('اختر الوحدة');
+      const list = normalizePlacements(placements);
+      const primary = list[0];
+      if (!primary) throw new Error('أضف مكانًا واحدًا على الأقل للمنتج في الكتالوج');
+      // المنتج بيتربط بورقة بس — قسم فيه فروع مايستقبلش منتجات مباشرة
+      const cats = tree?.categories ?? [];
+      for (const p of list) {
+        if (!p.categoryId && specialtyNeedsCategory(cats, p.specialtyId)) {
+          throw new Error('في تخصص فيه فروع — لازم تختار فئة (آخر فرع) لكل مكان');
+        }
+        if (p.categoryId && cats.some((c) => c.parent_id === p.categoryId)) {
           throw new Error('لا يمكن ربط المنتج بقسم فيه فروع — اختر آخر فرع في الشجرة');
         }
-      } else {
-        const { count, error: cErr } = await supabase
-          .from('categories')
-          .select('id', { count: 'exact', head: true })
-          .eq('specialty_id', form.specialty_id)
-          .is('parent_id', null);
-        if (cErr) throw new Error(arError(cErr));
-        if ((count ?? 0) > 0) {
-          throw new Error('التخصص فيه فروع — لازم تختار فئة (آخر فرع) للمنتج');
-        }
       }
+
       const payload = {
         sku: product?.sku ?? skuFromSourceCode(form.source_code),
         source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
-        brand: form.brand.trim() || null,
-        origin_country: form.origin_country.trim() || null,
-        specialty_id: form.specialty_id,
-        category_id: form.category_id || null,
+        specialty_id: primary.specialtyId,
+        category_id: primary.categoryId,
         unit_id: form.unit_id,
         images: form.image_url.trim() ? [form.image_url.trim()] : [],
       };
@@ -316,14 +329,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
       const { data: saved, error } = await q;
       if (error) throw new Error(arError(error));
       if (!saved) throw new Error('تعذر حفظ المنتج');
-      const productId = saved.id;
-      const links = specialtyLinkIds(form.specialty_id, form.extra_specialty_ids);
-      const { error: delErr } = await supabase.from('product_specialties').delete().eq('product_id', productId);
-      if (delErr) throw new Error(arError(delErr));
-      const { error: insErr } = await supabase.from('product_specialties').insert(
-        links.map((specialty_id) => ({ product_id: productId, specialty_id })),
-      );
-      if (insErr) throw new Error(arError(insErr));
+      await savePlacements(saved.id, list);
     },
     onSuccess: () => {
       toast('success', product ? 'تم تحديث المنتج' : 'تمت إضافة المنتج');
@@ -332,18 +338,8 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
     onError: (e) => toast('error', (e as Error).message),
   });
 
-  // أوراق الشجرة فقط — الأقسام اللي مفيهاش أطفال (ينفع يتضاف عليها منتجات)
-  const parentIds = new Set(
-    (lookups?.categories ?? []).map((c) => c.parent_id).filter((id): id is string => !!id),
-  );
-  const cats = (lookups?.categories ?? []).filter(
-    (c) =>
-      (!form.specialty_id || c.specialty_id === form.specialty_id) &&
-      !parentIds.has(c.id),
-  );
-
   return (
-    <Modal title={product ? `تعديل — ${product.name_ar}` : 'إضافة منتج'} open onClose={onClose}>
+    <Modal title={product ? `تعديل — ${product.name_ar}` : 'إضافة منتج'} open onClose={onClose} wide>
       <div className="space-y-4">
         <Field label="صورة المنتج">
           <div className="flex items-start gap-3">
@@ -390,78 +386,27 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
         <Field label="الاسم (عربي)">
           <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
         </Field>
+
+        <PlacementsField
+          value={placements}
+          onChange={setPlacements}
+          specialties={tree?.specialties ?? []}
+          categories={tree?.categories ?? []}
+        />
+
         <div className="grid grid-cols-2 gap-3">
-          <Field label="التخصص الأساسي" hint="الفئة والتقارير والخصومات على هذا التخصص">
-            <Select
-              value={form.specialty_id}
-              onChange={(e) => {
-                const next = e.target.value;
-                setForm({
-                  ...form,
-                  specialty_id: next,
-                  category_id: '',
-                  extra_specialty_ids: form.extra_specialty_ids.filter((id) => id !== next),
-                });
-              }}
-            >
-              <option value="">اختر…</option>
-              {(lookups?.specialties ?? []).map((s) => (
-                <option key={s.id} value={s.id}>{s.name_ar}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="الفئة" hint="آخر فرع فقط (مش قسم فيه فروع)">
-            <Select value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
-              <option value="">بدون فئة</option>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>{c.name_ar}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        {form.specialty_id && (
-          <Field label="تخصصات إضافية" hint="نفس المنتج يظهر في كتالوج التخصصات دي — من غير تكرار السعر أو الطلبات">
-            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-line p-2">
-              {(lookups?.specialties ?? []).filter((s) => s.id !== form.specialty_id).map((s) => {
-                const checked = form.extra_specialty_ids.includes(s.id);
-                return (
-                  <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-accent"
-                      checked={checked}
-                      onChange={() => {
-                        setForm((f) => ({
-                          ...f,
-                          extra_specialty_ids: checked
-                            ? f.extra_specialty_ids.filter((id) => id !== s.id)
-                            : [...f.extra_specialty_ids, s.id],
-                        }));
-                      }}
-                    />
-                    {s.name_ar}
-                  </label>
-                );
-              })}
-            </div>
-          </Field>
-        )}
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="الوحدة">
+          <Field label="الوحدة" hint="تظهر للمشتري جنب الكمية المطلوبة في التطبيق">
             <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
               <option value="">اختر…</option>
-              {(lookups?.units ?? []).map((u) => (
+              {(units ?? []).map((u) => (
                 <option key={u.id} value={u.id}>{u.name_ar}</option>
               ))}
             </Select>
           </Field>
-          <Field label="الماركة">
-            <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-          </Field>
-          <Field label="بلد المنشأ">
-            <Input value={form.origin_country} onChange={(e) => setForm({ ...form, origin_country: e.target.value })} />
-          </Field>
         </div>
+        {/* بلد المنشأ اتشال من المادة: هو خاصية عرض البائع (نفس المادة بمناشئ
+            مختلفة عند بائعين مختلفين)، وبيتحط على عرض البائع في seller_products. */}
+
         <div className="flex justify-end gap-2">
           <Btn variant="ghost" onClick={onClose} disabled={save.isPending}>إلغاء</Btn>
           <Btn variant="accent" busy={save.isPending} onClick={() => save.mutate()}>حفظ</Btn>

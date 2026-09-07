@@ -21,6 +21,7 @@ export default function Invoices() {
   const [sort, setSort] = useState<InvoiceSortKey>('issued_at');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   useEffect(() => {
     if (
@@ -33,12 +34,12 @@ export default function Invoices() {
   }, [search, debounced]);
 
   const stats = useQuery({
-    queryKey: ['invoices-stats', range.from, range.to],
-    queryFn: () => fetchInvoicesStats(range.from, range.to),
+    queryKey: ['invoices-stats', range.from, range.to, showCancelled],
+    queryFn: () => fetchInvoicesStats(range.from, range.to, showCancelled),
   });
 
   const list = useQuery({
-    queryKey: ['invoices', range.from, range.to, debounced, sort, dir, page],
+    queryKey: ['invoices', range.from, range.to, debounced, sort, dir, page, showCancelled],
     queryFn: () => fetchInvoices({
       from: range.from,
       to: range.to,
@@ -49,6 +50,7 @@ export default function Invoices() {
       dir,
       page,
       pageSize: PAGE_SIZE,
+      includeCancelled: showCancelled,
     }),
     placeholderData: keepPreviousData,
   });
@@ -130,7 +132,21 @@ export default function Invoices() {
           onChange={(e) => setSearch((v) => ({ ...v, buyer: e.target.value }))}
           className="w-44"
         />
-        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets />
+        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />
+        {/* الطلب الملغي/المرفوض مش بيتعرض هنا افتراضيًا — الفاتورة محفوظة في
+            القاعدة لكن مالهاش لازمة في مراجعة الفواتير اليومية. */}
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-subtext">
+          <input
+            type="checkbox"
+            className="size-4 accent-accent"
+            checked={showCancelled}
+            onChange={(e) => { setShowCancelled(e.target.checked); setPage(0); }}
+          />
+          إظهار فواتير الطلبات الملغية
+          {s && s.nCancelled > 0 && !showCancelled && (
+            <span className="rounded-full bg-surface px-1.5 py-0.5 tabular-nums">{s.nCancelled}</span>
+          )}
+        </label>
         <button
           type="button"
           onClick={() => { setRange({ from: '', to: '' }); setPage(0); }}

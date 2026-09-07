@@ -11,7 +11,6 @@
 // تكون من قيم قيد الجدول، والدالة كمان بتبعت إشعار للطالب.
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Paperclip } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
 import { PageHeader, Btn, Field, Textarea, StatusChip, Select } from '../components/ui';
@@ -22,21 +21,6 @@ import { fmtDateTime } from '../lib/format';
 import { productRequestStatusLabels, labelOf } from '../lib/labels';
 import { materialsTabFromSearch } from '../lib/materials-requests';
 import { SellerSubmissionsPanel } from './SellerSubmissionsPanel';
-
-const REQUEST_DOCS_BUCKET = 'request-docs';
-
-/** المرفقات في bucket خاص (قراءته للأدمن وصاحب الملف) — بنوقّع رابط وقت الضغط بس. */
-async function openRequestDoc(path: string) {
-  const { data, error } = await supabase.storage
-    .from(REQUEST_DOCS_BUCKET)
-    .createSignedUrl(path, 60);
-  if (error) throw new Error(arError(error));
-  window.open(data.signedUrl, '_blank', 'noopener');
-}
-
-function fileName(path: string) {
-  return path.split('/').pop() || path;
-}
 
 type Row = {
   id: string;
@@ -121,6 +105,7 @@ export default function ProductRequests() {
   const rows = (data ?? []).slice(0, PAGE_SIZE);
 
   const columns: Column<Row>[] = [
+    { key: 'requester', header: 'مقدّم الطلب', render: (r) => r.requester?.full_name ?? '—' },
     {
       key: 'name',
       header: 'المنتج المطلوب',
@@ -131,34 +116,7 @@ export default function ProductRequests() {
         </div>
       ),
     },
-    { key: 'requester', header: 'مقدّم الطلب', render: (r) => r.requester?.full_name ?? '—' },
-    { key: 'company', header: 'الشركة المستهدفة', render: (r) => r.company?.name_ar ?? '—' },
     { key: 'specialty', header: 'التخصص', render: (r) => r.specialty?.name_ar ?? '—' },
-    { key: 'qty', header: 'الكمية', render: (r) => (r.qty != null ? <span dir="ltr">{r.qty} {r.unit?.name_ar ?? ''}</span> : '—') },
-    {
-      key: 'docs',
-      header: 'المرفقات',
-      render: (r) =>
-        r.attachments?.length ? (
-          <div className="flex flex-col items-start gap-1">
-            {r.attachments.map((path) => (
-              <button
-                key={path}
-                type="button"
-                className="flex w-full items-start gap-1 text-start text-xs text-accent hover:underline"
-                onClick={() => {
-                  openRequestDoc(path).catch((e) => toast('error', (e as Error).message));
-                }}
-              >
-                <Paperclip size={13} className="mt-0.5 shrink-0" />
-                <span className="break-all" dir="ltr">{fileName(path)}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          '—'
-        ),
-    },
     { key: 'created', header: 'التاريخ', render: (r) => <span className="text-xs">{fmtDateTime(r.created_at)}</span> },
     {
       key: 'status',
@@ -185,11 +143,14 @@ export default function ProductRequests() {
 
   return (
     <div>
+      {/* التابات فوق العنوان: هي أول اختيار بيعمله الأدمن، فبتيجي قبل الترويسة. */}
+      <div className="mb-3 flex w-fit gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-line">
+        <TabLink to="/requests/materials" active={tab === 'buyers'} label="طلبات المشترين" />
+        <TabLink to="/requests/materials?tab=sellers" active={tab === 'sellers'} label="طلبات البائعين" />
+      </div>
+
       <PageHeader
         title="طلبات المواد"
-        subtitle={tab === 'sellers'
-          ? 'اقتراحات البائعين لإضافة منتج للكتالوج — كل حقول الفورم'
-          : 'طلبات المشترين لإضافة مادة بمواصفات خاصة'}
         actions={tab === 'buyers' ? (
           <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-40">
             <option value="open">المفتوحة</option>
@@ -200,11 +161,6 @@ export default function ProductRequests() {
           </Select>
         ) : undefined}
       />
-
-      <div className="mb-4 flex w-fit gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-line">
-        <TabLink to="/requests/materials" active={tab === 'buyers'} label="طلبات المشترين" />
-        <TabLink to="/requests/materials?tab=sellers" active={tab === 'sellers'} label="اقتراحات البائعين" />
-      </div>
 
       {tab === 'sellers' ? <SellerSubmissionsPanel /> : (
         <>

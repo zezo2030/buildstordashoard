@@ -20,6 +20,7 @@ import OrderDetail from './pages/OrderDetail';
 import Invoices from './pages/Invoices';
 import Returns from './pages/Returns';
 import Wallets from './pages/Wallets';
+import Finance from './pages/Finance';
 import Support from './pages/Support';
 import NotificationsPage from './pages/Notifications';
 import SettingsPage from './pages/Settings';
@@ -75,6 +76,7 @@ export default function App() {
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/returns" element={<Returns />} />
               <Route path="/wallets" element={<Wallets />} />
+              <Route path="/finance" element={<Finance />} />
               <Route path="/withdrawals" element={<Navigate to="/wallets" replace />} />
               <Route path="/credit" element={<Navigate to="/" replace />} />
               <Route path="/discounts" element={<Navigate to="/" replace />} />

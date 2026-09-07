@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, FolderOpen, ImagePlus, Package, Pencil, Trash2, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { deleteCatalogProduct } from '../lib/catalog-product-delete';
+import { allSelected, pruneSelection, toggleAll, toggleId } from '../lib/bulk-select';
 import { skuFromSourceCode } from '../lib/catalog-sku';
 import { PageHeader, Btn, Field, Input, Select, Toggle, Card, Spinner, EmptyState } from '../components/ui';
 import { ImportProductsModal } from '../components/ImportProductsModal';
@@ -145,6 +146,9 @@ function TaxonomyBrowser() {
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [converting, setConverting] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<ProductRow | null>(null);
+  // تحديد أكتر من منتج للحذف مرة واحدة — الاختيار بيتصفّر مع كل تغيير مستوى
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importDrag, setImportDrag] = useState(false);
@@ -180,17 +184,24 @@ function TaxonomyBrowser() {
     },
   });
 
+  // المنتج ممكن يكون متحطّط هنا كمكان إضافي مش كمكانه الأساسي — فبنقرا من
+  // `product_placements` مش من أعمدة المنتج، وإلا المستوى يبان فاضي وهو مش فاضي.
   const { data: products, isLoading: loadingProducts } = useQuery({
     queryKey: ['taxonomy-products', specialtyId, categoryCrumb?.id ?? 'none'],
     enabled: !!specialtyId,
     queryFn: async () => {
       let q = supabase
         .from('products')
-        .select('id, sku, source_code, name_ar, brand, images, is_active, unit_id, unit:units (name_ar)')
-        .eq('specialty_id', specialtyId!)
+        .select(
+          'id, sku, source_code, name_ar, brand, images, is_active, unit_id, unit:units (name_ar),' +
+          ' product_placements!inner (specialty_id, category_id)',
+        )
+        .eq('product_placements.specialty_id', specialtyId!)
         .eq('is_active', true)
         .order('name_ar');
-      q = categoryCrumb ? q.eq('category_id', categoryCrumb.id) : q.is('category_id', null);
+      q = categoryCrumb
+        ? q.eq('product_placements.category_id', categoryCrumb.id)
+        : q.is('product_placements.category_id', null);
       const { data, error } = await q;
       if (error) throw new Error(arError(error));
       return data as unknown as ProductRow[];
@@ -287,6 +298,30 @@ function TaxonomyBrowser() {
       if (error) throw new Error(arError(error));
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // حذف جماعي — الفلترة (عروض بائعين/مقايسات) بتحصل في الداتابيز عشان
+  // الحذف يبقى معاملة واحدة، والرد بيقول اتحذف كام واتمنع مين وليه.
+  const removeSelected = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data, error } = await supabase.rpc('admin_delete_products', { p_ids: ids });
+      if (error) throw new Error(arError(error));
+      return data as unknown as { deleted: number; blocked: { id: string; name_ar: string }[] };
+    },
+    onSuccess: (res) => {
+      const blocked = res.blocked?.length ?? 0;
+      toast(
+        blocked > 0 ? 'error' : 'success',
+        blocked > 0
+          ? `تم حذف ${res.deleted} منتج — ${blocked} مربوط بعروض بائعين أو مقايسات فماتحذفش`
+          : `تم حذف ${res.deleted} منتج`,
+      );
+      setSelectedIds([]);
+      setBulkDeleting(false);
       qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
       qc.invalidateQueries({ queryKey: ['products'] });
     },
@@ -394,6 +429,10 @@ function TaxonomyBrowser() {
   const loading = loadingCats || loadingProducts;
   const hasBranches = (childCategories?.length ?? 0) > 0;
   const hasProducts = (products?.length ?? 0) > 0;
+  const visibleProductIds = (products ?? []).map((p) => p.id);
+  // الاختيار محفوظ في state لكن اللي بيتعرض هو المتقاطع مع المعروض دلوقتي —
+  // كده تغيير المستوى مايسيبش منتجات محددة مش ظاهرة تتحذف بالغلط.
+  const selected = pruneSelection(selectedIds, visibleProductIds);
   /** XOR: المستوى الفاضي يختار نوعه؛ بعد أول إضافة يتقفل النوع التاني */
   const canAddBranch = !hasProducts;
   const canAddProduct = !hasBranches;
@@ -541,6 +580,31 @@ function TaxonomyBrowser() {
                 className={importDrag ? 'bg-accent-soft/40' : undefined}
               >
                 <SectionTitle title="المنتجات في هذا المستوى" count={products?.length ?? 0} />
+                {!!products?.length && (
+                  <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface/60 px-4 py-2">
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-subtext">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-accent"
+                        checked={allSelected(selected, visibleProductIds)}
+                        onChange={() => setSelectedIds(toggleAll(selected, visibleProductIds))}
+                      />
+                      تحديد الكل
+                    </label>
+                    {selected.length > 0 && (
+                      <>
+                        <span className="text-xs text-primary">محدد: {selected.length}</span>
+                        <Btn
+                          variant="danger"
+                          className="px-2.5 py-1 text-xs"
+                          onClick={() => setBulkDeleting(true)}
+                        >
+                          <Trash2 size={14} /> حذف المحدد
+                        </Btn>
+                      </>
+                    )}
+                  </div>
+                )}
                 {!products?.length ? (
                   <p className="px-4 py-6 text-center text-sm text-subtext">
                     لا توجد منتجات مربوطة بهذا المستوى
@@ -555,6 +619,13 @@ function TaxonomyBrowser() {
                   <div className="divide-y divide-line">
                     {products.map((p) => (
                       <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80">
+                        <input
+                          type="checkbox"
+                          aria-label={`تحديد ${p.name_ar}`}
+                          className="size-4 shrink-0 accent-accent"
+                          checked={selected.includes(p.id)}
+                          onChange={() => setSelectedIds(toggleId(selected, p.id))}
+                        />
                         <Thumb url={p.images?.[0] ?? null} tone="accent" empty="package" />
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium text-primary">{p.name_ar}</div>
@@ -684,6 +755,17 @@ function TaxonomyBrowser() {
         busy={removeProduct.isPending}
         onConfirm={() => deletingProduct && removeProduct.mutate(deletingProduct)}
         onClose={() => setDeletingProduct(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkDeleting}
+        title="حذف المنتجات المحددة"
+        message={`سيتم حذف ${selected.length} منتج نهائيًا. المنتج المربوط بعروض بائعين أو مقايسات مش هيتحذف وهيتقالك عليه.`}
+        confirmLabel="حذف المحدد"
+        danger
+        busy={removeSelected.isPending}
+        onConfirm={() => removeSelected.mutate(selected)}
+        onClose={() => setBulkDeleting(false)}
       />
     </div>
   );
@@ -1101,7 +1183,6 @@ function TaxonomyProductModal({
     source_code: product?.source_code ?? '',
     name_ar: product?.name_ar ?? '',
     unit_id: product?.unit_id ?? '',
-    brand: product?.brand ?? '',
     image_url: product?.images?.[0] ?? '',
     is_active: product?.is_active ?? true,
   });
@@ -1154,7 +1235,6 @@ function TaxonomyProductModal({
         sku: product?.sku ?? skuFromSourceCode(form.source_code),
         source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
-        brand: form.brand.trim() || null,
         specialty_id: specialtyId,
         category_id: categoryId,
         unit_id: form.unit_id,
@@ -1233,9 +1313,6 @@ function TaxonomyProductModal({
                 </option>
               ))}
             </Select>
-          </Field>
-          <Field label="الماركة">
-            <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
           </Field>
         </div>
         {product && (

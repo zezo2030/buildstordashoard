@@ -43,3 +43,4 @@ export async function uploadProductImage(file: File): Promise<string> {
   }
   throw lastErr ?? new Error('فشل رفع الصورة');
 }
+

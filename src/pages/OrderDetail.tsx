@@ -5,7 +5,7 @@ import { ArrowRight, Printer } from 'lucide-react';
 import { printInvoice } from '../lib/invoice-html';
 import { supabase, arError } from '../lib/supabase';
 import { PageHeader, Card, StatusChip, Money, Spinner, ErrorState } from '../components/ui';
-import { fmtDate, fmtDateTime, qty } from '../lib/format';
+import { fmtDate, fmtDateTime, localPhone, qty } from '../lib/format';
 import { locFromOrder, type SiteLite } from '../api/location';
 import { LocationCell } from '../components/LocationCell';
 import { orderStatusLabels, paymentStatusLabels, paymentMethodLabels, labelOf } from '../lib/labels';
@@ -137,8 +137,15 @@ export default function OrderDetail() {
             <dl className="space-y-2.5 text-sm">
               <div>
                 <dt className="text-subtext">المشتري</dt>
-                <dd className="font-medium">{o.buyer?.full_name ?? '—'}</dd>
-                {o.buyer?.phone && <dd className="text-xs text-subtext" dir="ltr">{o.buyer.phone}</dd>}
+                {/* لينك زي المورّد بالظبط — الضغط بيفتح ملف المشتري كامل */}
+                <dd>
+                  <Link to={`/users/${o.buyer_id}`} className="font-medium text-accent hover:underline">
+                    {o.buyer?.full_name ?? '—'}
+                  </Link>
+                </dd>
+                {o.buyer?.phone && (
+                  <dd className="text-xs text-subtext" dir="ltr">{localPhone(o.buyer.phone)}</dd>
+                )}
                 {o.buyer?.email && <dd className="text-xs text-subtext" dir="ltr">{o.buyer.email}</dd>}
               </div>
               <div>

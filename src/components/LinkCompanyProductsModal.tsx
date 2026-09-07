@@ -1,13 +1,9 @@
 // ربط منتجات الكتالوج الموجودة مسبقًا بشركة عبر رفع شيت Excel — بالكود فقط.
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileSpreadsheet, Download } from 'lucide-react';
+import { FileSpreadsheet } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
-import {
-  downloadCodeColumnXlsxTemplate,
-  parseCodeColumnXlsx,
-  type ParsedProductRow,
-} from '../lib/product-xlsx';
+import { parseCodeColumnXlsx, type ParsedProductRow } from '../lib/product-xlsx';
 import {
   planCompanyProductLink,
   type CatalogMatch,
@@ -124,11 +120,8 @@ export function LinkCompanyProductsModal({
           — حط كود المادة الموجود في الكتالوج، سطر لكل مادة. لا يُنشأ أي منتج جديد ولا يُوضع سعر: يُربط كل كود موجود في الكتالوج النشط بـ{companyName}، والشركة تسعّر من التطبيق.
         </p>
 
-        <Btn type="button" variant="ghost" onClick={downloadCodeColumnXlsxTemplate}>
-          <Download size={16} />
-          تحميل نموذج Excel
-        </Btn>
-
+        {/* مفيش زر «تحميل نموذج»: الملف عمود واحد اسمه Code، فالنموذج مابيضيفش
+            حاجة على السطر اللي فوق. */}
         <Field label="ملف Excel">
           <input
             ref={fileRef}

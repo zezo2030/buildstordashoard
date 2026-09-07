@@ -32,7 +32,25 @@ export type AccountRow = {
   nProducts: number;
   commission: number;
   commissionRate: number | null;
+  // خطة الرسوم النشطة — نسبة من المبيعات أو اشتراك ثابت بمدة محددة
+  billingKind: BillingKind | null;
+  billingFee: number;
+  billingFrom: string | null;
+  billingTo: string | null;
+  billingCycles: number | null;
+  /** الاشتراكات المحصّلة فعليًا خلال الفترة المختارة */
+  feesCollected: number;
 };
+
+export type BillingKind = 'commission' | 'subscription';
+export type BillingSubject = 'individual_buyer' | 'company_buyer' | 'seller';
+
+/** نوع الحساب في اللوحة ↔ نوع الحساب في خطط الرسوم. */
+export function billingSubjectOf(kind: AccountKind): BillingSubject {
+  if (kind === 'seller') return 'seller';
+  if (kind === 'company_buyer') return 'company_buyer';
+  return 'individual_buyer';
+}
 
 export type AccountsStats = {
   total: number;
@@ -88,6 +106,12 @@ function toRow(r: Record<string, unknown>): AccountRow {
     nProducts: num(r.n_products),
     commission: num(r.commission),
     commissionRate: r.commission_rate == null ? null : num(r.commission_rate),
+    billingKind: (r.billing_kind as BillingKind | null) ?? null,
+    billingFee: num(r.billing_fee),
+    billingFrom: (r.billing_from as string | null) ?? null,
+    billingTo: (r.billing_to as string | null) ?? null,
+    billingCycles: r.billing_cycles == null ? null : num(r.billing_cycles),
+    feesCollected: num(r.fees_collected),
   };
 }
 
@@ -286,4 +310,83 @@ export async function createCompanyBuyer(input: CreateCompanyBuyerInput): Promis
   );
   if (!data.company_id) throw new Error('تعذر إنشاء المشتري');
   return data.company_id;
+}
+
+// ---------- حذف حساب --------------------------------------------------------
+// الحذف الكامل بيمشي لما مافيش سجلات مرتبطة (قيود RESTRICT في الداتابيز بترفضه
+// غير كده)، وساعتها الدالة بترجع 'soft': الحساب بيتقفل ويتخفي من القوايم بدل
+// ما نكسر طلبات وفواتير موجودة.
+export type DeleteMode = 'hard' | 'soft';
+
+export async function deleteAccount(
+  kind: AccountKind,
+  id: string,
+  reason?: string,
+): Promise<DeleteMode> {
+  const fn = kind === 'seller' ? 'admin_delete_company' : 'admin_delete_account';
+  const args = kind === 'seller'
+    ? { p_company_id: id, p_reason: reason?.trim() || undefined }
+    : { p_profile_id: id, p_reason: reason?.trim() || undefined };
+  const res = await callRpc<{ mode?: string }>(fn, args);
+  return res?.mode === 'hard' ? 'hard' : 'soft';
+}
+
+// ---------- خطة الرسوم ------------------------------------------------------
+export type BillingPlanInput = {
+  subject: BillingSubject;
+  subjectId: string;
+  kind: BillingKind;
+  /** نسبة % — لما kind='commission' */
+  rate?: number | null;
+  /** مبلغ ثابت للدورة — لما kind='subscription' (صفر = مجاني) */
+  fee?: number | null;
+  startsOn?: string | null;
+  endsOn?: string | null;
+  cycles?: number | null;
+  note?: string | null;
+};
+
+export async function setBillingPlan(input: BillingPlanInput): Promise<void> {
+  if (input.kind === 'commission') {
+    const rate = Number(input.rate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      throw new Error('نسبة العمولة يجب أن تكون بين 0 و 100');
+    }
+  } else {
+    const fee = Number(input.fee ?? 0);
+    if (!Number.isFinite(fee) || fee < 0) throw new Error('قيمة الاشتراك لا يمكن أن تكون سالبة');
+  }
+  await callRpc('admin_set_billing_plan', {
+    p_subject_type: input.subject,
+    p_subject_id: input.subjectId,
+    p_kind: input.kind,
+    p_rate: input.kind === 'commission' ? Number(input.rate) : undefined,
+    p_fee: input.kind === 'subscription' ? Number(input.fee ?? 0) : 0,
+    p_starts_on: input.startsOn || undefined,
+    p_ends_on: input.endsOn || undefined,
+    p_cycles: input.cycles ?? undefined,
+    p_note: input.note?.trim() || undefined,
+  });
+}
+
+/** تسجيل تحصيل اشتراك لحساب — بيدخل في «الرسوم المحصّلة» في قسم المال. */
+export async function collectSubscription(args: {
+  subject: BillingSubject;
+  subjectId: string;
+  amount: number;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  note?: string | null;
+}): Promise<void> {
+  if (!Number.isFinite(args.amount) || args.amount < 0) {
+    throw new Error('قيمة الرسوم لا يمكن أن تكون سالبة');
+  }
+  await callRpc('admin_collect_subscription', {
+    p_subject_type: args.subject,
+    p_subject_id: args.subjectId,
+    p_amount: args.amount,
+    p_period_start: args.periodStart || undefined,
+    p_period_end: args.periodEnd || undefined,
+    p_note: args.note?.trim() || undefined,
+  });
 }

@@ -13,7 +13,7 @@ import {
 import { BuyerStatsPanel } from '../components/AccountStatsPanel';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
-import { fmtDate, fmtDateTime } from '../lib/format';
+import { fmtDate, fmtDateTime, localPhone } from '../lib/format';
 import { roleLabels, accountStatusLabels, orderStatusLabels, labelOf } from '../lib/labels';
 
 const memberRoleLabel: Record<string, string> = {
@@ -181,7 +181,7 @@ export default function UserDetail() {
           <h3 className="mb-3 font-bold">البيانات الشخصية</h3>
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <Row label="البريد" value={p.email} ltr />
-            <Row label="الهاتف" value={p.phone} ltr />
+            <Row label="الهاتف" value={localPhone(p.phone)} ltr />
             <Row label="الرقم المدني" value={p.civil_id} ltr />
             <Row label="الجنسية" value={p.nationality} />
             <Row label="اللغة" value={p.locale === 'en' ? 'English' : p.locale === 'ar' ? 'العربية' : p.locale} />
@@ -274,7 +274,7 @@ export default function UserDetail() {
                   </div>
                   {(a.phone || a.recipient) && (
                     <div className="mt-0.5 text-xs text-subtext" dir="ltr">
-                      {[a.recipient, a.phone].filter(Boolean).join(' · ')}
+                      {[a.recipient, a.phone ? localPhone(a.phone) : null].filter(Boolean).join(' · ')}
                     </div>
                   )}
                 </div>

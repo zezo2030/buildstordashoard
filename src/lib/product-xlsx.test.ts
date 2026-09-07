@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { skuFromSourceCode } from './catalog-sku';
 import {
   buildCodeColumnXlsxTemplate,
+  cleanCell,
   buildProductXlsxTemplate,
   parseCodeColumnXlsx,
   parseProductXlsx,
@@ -163,5 +164,24 @@ describe('parseCodeColumnXlsx', () => {
   it('is rejected by the product importer because that still needs the full header row', async () => {
     const bytes = buildCodeColumnXlsxTemplate(['54010111']);
     await expect(parseProductXlsx(bytes)).rejects.toThrow(/Product Name|Made In|نموذج/i);
+  });
+});
+
+describe('cleanCell', () => {
+  it('بيرجّع النص المفيد زي ما هو', () => {
+    expect(cleanCell(' الكويت ')).toBe('الكويت');
+  });
+
+  it('القيم النايبة بتبقى null مش نص', () => {
+    for (const v of ['N/A', 'n/a', 'NA', '-', '—', 'غير متوفر', 'لا يوجد']) {
+      expect(cleanCell(v)).toBeNull();
+    }
+  });
+
+  it('الفاضي والمعدوم بيرجعوا null', () => {
+    expect(cleanCell('')).toBeNull();
+    expect(cleanCell('   ')).toBeNull();
+    expect(cleanCell(null)).toBeNull();
+    expect(cleanCell(undefined)).toBeNull();
   });
 });

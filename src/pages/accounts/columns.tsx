@@ -2,33 +2,36 @@
 // والاختلاف في الأعمدة الظاهرة وترتيبها بس.
 import type { Column } from '../../components/DataTable';
 import { StatusChip, Money } from '../../components/ui';
-import { fmtDate, fmtDateTime } from '../../lib/format';
+import { fmtDate, fmtDateTime, localPhone } from '../../lib/format';
 import type { AccountKind, AccountRow } from '../../api/accounts';
 
 export type ColumnActions = {
   onPassword: (row: AccountRow) => void;
   onSuspend: (row: AccountRow) => void;
   onReactivate: (row: AccountRow) => void;
+  onDelete: (row: AccountRow) => void;
   isReactivating?: (row: AccountRow) => boolean;
   renderCommission?: (row: AccountRow) => React.ReactNode;
 };
 
 const n = (v: number) => <span dir="ltr" className="tabular-nums">{v}</span>;
 
+/**
+ * الحساب الموقوف لازم يبان معاه سبب الوقف وتاريخه في الخلية نفسها — الشرح كان
+ * في `title` بس، يعني مايبانش غير بالوقوف بالماوس فوق الشارة.
+ */
 function statusCell(r: AccountRow) {
   if (r.status === 'active') return <StatusChip label="نشط" tone="green" />;
-  const why = [r.suspendReason, r.suspendedAt ? fmtDateTime(r.suspendedAt) : null]
-    .filter(Boolean)
-    .join(' — ');
   return (
-    <span title={why || undefined}>
+    <div className="flex flex-col items-start gap-0.5">
       <StatusChip label="موقوف" tone="red" />
       {r.suspendReason && (
-        <span className="mt-0.5 block break-words text-[11px] text-subtext">
-          {r.suspendReason}
-        </span>
+        <span className="block break-words text-[11px] text-danger">{r.suspendReason}</span>
       )}
-    </span>
+      {r.suspendedAt && (
+        <span className="block text-[11px] text-subtext">{fmtDateTime(r.suspendedAt)}</span>
+      )}
+    </div>
   );
 }
 
@@ -45,7 +48,7 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
         <div>
           <div className="break-words font-medium">{r.name}</div>
           <div className="break-all text-xs text-subtext" dir="ltr">
-            {isSeller ? (r.ownerName ?? '') : (r.email ?? r.phone ?? '')}
+            {isSeller ? (r.ownerName ?? '') : (r.email ?? localPhone(r.phone))}
           </div>
         </div>
       ),
@@ -62,7 +65,8 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
       sortKey: 'sub_accounts',
       render: (r) => n(r.subAccounts),
     },
-    { key: 'phone', header: 'رقم الهاتف', sortKey: 'phone', render: (r) => <span dir="ltr">{r.phone ?? '—'}</span> },
+    // كل الحسابات كويتية — الكود الدولي +965 مالوش لازمة ومكبّر العمود
+    { key: 'phone', header: 'رقم الهاتف', sortKey: 'phone', render: (r) => <span dir="ltr">{localPhone(r.phone)}</span> },
     { key: 'status', header: 'الحالة', sortKey: 'status', render: statusCell },
     { key: 'created', header: 'تاريخ التسجيل', sortKey: 'created_at', render: (r) => fmtDate(r.createdAt) },
   ];
@@ -77,7 +81,7 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
       { key: 'partners', header: 'عدد المشترين', sortKey: 'n_partners', render: (r) => n(r.nPartners) },
       {
         key: 'commission',
-        header: 'العمولة %',
+        header: 'الرسوم',
         sortKey: 'commission_rate',
         render: (r) =>
           a.renderCommission
@@ -93,6 +97,12 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
       { key: 'partners', header: 'عدد البائعين', sortKey: 'n_partners', render: (r) => n(r.nPartners) },
       { key: 'total', header: 'إجمالي المشتريات', sortKey: 'total', render: (r) => <Money value={r.total} /> },
       { key: 'balance', header: 'الرصيد', sortKey: 'balance', render: (r) => <Money value={r.balance} /> },
+      {
+        key: 'subscription',
+        header: 'الاشتراك',
+        render: (r) =>
+          a.renderCommission ? a.renderCommission(r) : <span dir="ltr">—</span>,
+      },
     );
   }
 
@@ -128,6 +138,13 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
             إعادة تفعيل
           </button>
         )}
+        <button
+          type="button"
+          className="rounded-md border border-danger/40 bg-white px-2 py-1 text-[11px] font-medium text-danger hover:bg-red-50"
+          onClick={() => a.onDelete(r)}
+        >
+          حذف
+        </button>
       </div>
     ),
   });

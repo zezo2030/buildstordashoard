@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, keepPreviousData, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Undo2, Package, MapPin, ShoppingCart, Users, Store, Wallet, FileText, Paperclip,
-} from 'lucide-react';
+import { Undo2, Package, Wallet, FileText, Paperclip } from 'lucide-react';
 import {
   fetchReturns, fetchReturnsStats, decideReturn, receiveReturn,
   type ReturnRow, type ReturnSortKey, type ReturnDecision,
@@ -92,13 +90,13 @@ export default function Returns() {
         <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard title="إجمالي المسترد" value={s ? <Money value={s.refund} /> : '…'}
             icon={<Wallet size={20} />} tone="orange"
-            footer={<DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets />} />
+            footer={<DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />} />
           <KpiCard title="عدد المرتجعات" value={s ? s.nReturns : '…'} icon={<Undo2 size={20} />} tone="navy" />
           <KpiCard title="عدد المواد المرتجعة" value={s ? s.nItems : '…'} icon={<Package size={20} />} tone="blue" />
-          <KpiCard title="عدد الطلبات المتأثرة" value={s ? s.nOrders : '…'} icon={<ShoppingCart size={20} />} tone="navy" />
-          <KpiCard title="عدد المواقع" value={s ? s.nSites : '…'} icon={<MapPin size={20} />} tone="blue" />
-          <KpiCard title="عدد المشترين" value={s ? s.nBuyers : '…'} icon={<Users size={20} />} tone="navy" />
-          <KpiCard title="عدد البائعين" value={s ? s.nSellers : '…'} icon={<Store size={20} />} tone="orange" />
+          {/* الرسوم اللي المنصة رجّعتها للبائع على المواد المرتجعة — البائع
+              اللي على اشتراك ثابت مالوش استرداد لأنه مادفعش عمولة أصلاً. */}
+          <KpiCard title="الرسوم المعادة للبائعين" value={s ? <Money value={s.feesRefunded} /> : '…'}
+            icon={<Undo2 size={20} />} tone="green" />
         </div>
       )}
 
@@ -113,7 +111,7 @@ export default function Returns() {
           <option value="all">كل الحالات</option>
           {Object.entries(returnStatusLabels).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </Select>
-        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets />
+        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />
       </Card>
 
       <DataTable

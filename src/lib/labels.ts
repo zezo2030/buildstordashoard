@@ -50,17 +50,19 @@ export const paymentMethodLabels: LabelMap = {
   cash_on_delivery: { label: 'كاش عند التوصيل', tone: 'gray' },
 };
 
+// التسميات هنا بتقول مين اللي عمل الحاجة: «مرفوض» لوحدها كانت بتلخبط رفض
+// البائع مع إلغاء المشتري لطلب الإرجاع.
 export const returnStatusLabels: LabelMap = {
   draft: { label: 'مسودة', tone: 'gray' },
-  submitted: { label: 'مُقدَّم', tone: 'orange' },
+  submitted: { label: 'لم يتم قبوله بعد', tone: 'orange' },
   seller_review: { label: 'مراجعة البائع', tone: 'blue' },
   approved: { label: 'مقبول', tone: 'green' },
   partially_approved: { label: 'مقبول جزئيًا', tone: 'blue' },
-  rejected: { label: 'مرفوض', tone: 'red' },
+  rejected: { label: 'رفض من البائع', tone: 'red' },
   picked_up: { label: 'تم الاستلام من العميل', tone: 'navy' },
   received: { label: 'وصل للبائع', tone: 'navy' },
   refunded: { label: 'تم رد المبلغ', tone: 'green' },
-  cancelled: { label: 'ملغي', tone: 'gray' },
+  cancelled: { label: 'رفض من المشتري', tone: 'gray' },
 };
 
 export const refundMethodLabels: LabelMap = {

@@ -14,7 +14,8 @@ import { PasswordModal } from '../../components/PasswordModal';
 import { useToast } from '../../components/Toast';
 import { buildColumns } from './columns';
 import { SuspendDialog } from './SuspendDialog';
-import { CommissionCell } from './CommissionCell';
+import { BillingCell } from './BillingCell';
+import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { PendingSellersStrip } from './PendingSellersStrip';
 import { AddSellerModal } from './AddSellerModal';
 import { AddBuyerModal } from './AddBuyerModal';
@@ -53,6 +54,7 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [suspendFor, setSuspendFor] = useState<AccountRow | null>(null);
+  const [deleteFor, setDeleteFor] = useState<AccountRow | null>(null);
 
   const reactivate = useMutation({
     mutationFn: (r: AccountRow) => reactivateAccount(kind, r.id),
@@ -108,6 +110,7 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
     onPassword: (r) => { if (r.ownerId) setPwdFor(r); },
     onSuspend: (r) => setSuspendFor(r),
     onReactivate: (r) => reactivate.mutate(r),
+    onDelete: (r) => setDeleteFor(r),
     isReactivating: (r) => reactivate.isPending && reactivate.variables?.id === r.id,
     // key={r.id} إجباري هنا: DataTable بيعمل key={i} على الصفوف (فهرس، مش هوية)،
     // فلو الترتيب اتغيّر (فرز، صفحة جديدة، أو invalidate من تعليق متزامن) نفس
@@ -115,7 +118,7 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
     // بالـ state القديم (editing/value) بتاعه. تغيير الـ key بيجبر React يعمل
     // remount كامل للمكوّن، وده بيصفّر editing و value تلقائي بدل ما يفضلوا شايلين
     // قيمة اتكتبت لشركة تانية خالص.
-    renderCommission: (r) => <CommissionCell key={r.id} row={r} />,
+    renderCommission: (r) => <BillingCell key={r.id} row={r} kind={kind} />,
   });
 
   const s = stats.data;
@@ -235,6 +238,9 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
       )}
       {suspendFor && (
         <SuspendDialog row={suspendFor} kind={kind} onClose={() => setSuspendFor(null)} />
+      )}
+      {deleteFor && (
+        <DeleteAccountDialog row={deleteFor} kind={kind} onClose={() => setDeleteFor(null)} />
       )}
       {addingSeller && <AddSellerModal onClose={() => setAddingSeller(false)} />}
       {addingBuyer && kind !== 'seller' && (

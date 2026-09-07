@@ -1,6 +1,7 @@
 // مكوّنات أساسية موحّدة — تُبنى مرة واحدة من التوكِنز ولا تُنسّق يدويًا في الشاشات.
 import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes, ButtonHTMLAttributes } from 'react';
 import { Loader2, Inbox } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { Tone } from '../lib/labels';
 import { money } from '../lib/format';
 
@@ -52,16 +53,20 @@ export function Money({ value, signed = false }: { value: number | string | null
   );
 }
 
-export function KpiCard({ title, value, hint, icon, tone = 'navy', footer }: {
+export function KpiCard({ title, value, hint, icon, tone = 'navy', footer, to, onClick }: {
   title: string;
   value: ReactNode;
   hint?: string;
   icon?: ReactNode;
   tone?: Tone;
   footer?: ReactNode;
+  /** الكارت بيبقى لينك للتفاصيل — الرقم لوحده مش كفاية، الأدمن عايز يشوف مين. */
+  to?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <Card className="p-4 shadow-[0_1px_0_rgba(22,40,63,0.03)] transition-shadow hover:shadow-[0_10px_28px_-22px_rgba(22,40,63,0.45)]">
+  const clickable = !!to || !!onClick;
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-[13px] text-subtext">{title}</div>
@@ -70,6 +75,24 @@ export function KpiCard({ title, value, hint, icon, tone = 'navy', footer }: {
         </div>
         {icon && <div className={`shrink-0 rounded-xl p-2.5 ${toneClasses[tone]}`}>{icon}</div>}
       </div>
+      {/* الـfooter جوّه الكارت بس بره اللينك: فيه فلاتر تاريخ الضغط عليها
+          مالوش علاقة بالتنقّل. */}
+    </>
+  );
+
+  return (
+    <Card
+      className={`p-4 shadow-[0_1px_0_rgba(22,40,63,0.03)] transition-shadow hover:shadow-[0_10px_28px_-22px_rgba(22,40,63,0.45)] ${
+        clickable ? 'hover:border-accent/50' : ''
+      }`}
+    >
+      {to ? (
+        <Link to={to} className="block">{body}</Link>
+      ) : onClick ? (
+        <button type="button" onClick={onClick} className="block w-full text-start">{body}</button>
+      ) : (
+        body
+      )}
       {footer && <div className="mt-3 border-t border-line pt-2.5">{footer}</div>}
     </Card>
   );

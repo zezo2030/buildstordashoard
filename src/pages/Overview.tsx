@@ -104,12 +104,15 @@ export default function Overview() {
           icon={<Wallet size={20} />}
           tone="navy"
         />
+        {/* الكارت لينك للكتالوج: الأدمن عايز يشوف المواد نفسها بمسارها في
+            الشجرة، مش الرقم بس. */}
         <KpiCard
           title="المواد المرفوعة للمنصة"
           value={d.productsTotal}
-          hint={`منها ${d.productsActive} نشط`}
+          hint={`منها ${d.productsActive} نشط — اضغط لعرضها بمسارها`}
           icon={<Package size={20} />}
           tone="blue"
+          to="/catalog/products"
         />
         <KpiCard title="المشترون (أفراد)" value={d.individualBuyers} icon={<Users size={20} />} tone="blue" />
         <KpiCard title="المشترون (شركات)" value={d.companyBuyers} icon={<Building2 size={20} />} tone="navy" />

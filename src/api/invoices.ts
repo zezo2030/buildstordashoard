@@ -22,6 +22,7 @@ export type InvoicesStats = {
   nOrders: number;
   nBuyers: number;
   nSellers: number;
+  nCancelled: number;
   total: number;
   commission: number;
 };
@@ -36,6 +37,8 @@ export type InvoicesQuery = {
   dir: 'asc' | 'desc';
   page: number;
   pageSize: number;
+  /** فواتير الطلبات الملغية مخفية افتراضيًا — الطلب الملغي مالوش لازمة هنا. */
+  includeCancelled: boolean;
 };
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -51,6 +54,7 @@ export async function fetchInvoices(q: InvoicesQuery): Promise<{ rows: InvoiceRo
     p_dir: q.dir,
     p_limit: q.pageSize,
     p_offset: q.page * q.pageSize,
+    p_include_cancelled: q.includeCancelled,
   } as never);
   if (error) throw new Error(arError(error));
   const r = data as unknown as { rows?: Record<string, unknown>[]; total?: unknown };
@@ -70,9 +74,13 @@ export async function fetchInvoices(q: InvoicesQuery): Promise<{ rows: InvoiceRo
   };
 }
 
-export async function fetchInvoicesStats(from: string | null, to: string | null): Promise<InvoicesStats> {
+export async function fetchInvoicesStats(
+  from: string | null,
+  to: string | null,
+  includeCancelled = false,
+): Promise<InvoicesStats> {
   const { data, error } = await supabase.rpc('admin_invoices_stats' as never, {
-    p_from: from || null, p_to: to || null,
+    p_from: from || null, p_to: to || null, p_include_cancelled: includeCancelled,
   } as never);
   if (error) throw new Error(arError(error));
   const r = data as unknown as Record<string, unknown>;
@@ -82,6 +90,7 @@ export async function fetchInvoicesStats(from: string | null, to: string | null)
     nOrders: num(r.n_orders),
     nBuyers: num(r.n_buyers),
     nSellers: num(r.n_sellers),
+    nCancelled: num(r.n_cancelled),
     total: num(r.total),
     commission: num(r.commission),
   };

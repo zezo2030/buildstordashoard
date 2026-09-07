@@ -13,7 +13,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -200,6 +200,65 @@ export type Database = {
           },
         ]
       }
+      billing_plans: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          cycles: number | null
+          ends_on: string | null
+          fee: number
+          id: string
+          is_active: boolean
+          kind: Database["public"]["Enums"]["billing_kind"]
+          note: string | null
+          rate: number | null
+          starts_on: string | null
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["billing_subject"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          cycles?: number | null
+          ends_on?: string | null
+          fee?: number
+          id?: string
+          is_active?: boolean
+          kind: Database["public"]["Enums"]["billing_kind"]
+          note?: string | null
+          rate?: number | null
+          starts_on?: string | null
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["billing_subject"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          cycles?: number | null
+          ends_on?: string | null
+          fee?: number
+          id?: string
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["billing_kind"]
+          note?: string | null
+          rate?: number | null
+          starts_on?: string | null
+          subject_id?: string
+          subject_type?: Database["public"]["Enums"]["billing_subject"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cart_items: {
         Row: {
           added_at: string
@@ -353,12 +412,16 @@ export type Database = {
           block: string | null
           commercial_register: string | null
           commission_rate: number
+          contract_from: string | null
+          contract_number: string | null
+          contract_to: string | null
           cover_url: string | null
           created_at: string
           created_by: string | null
           credit_from: string | null
           credit_limit: number | null
           credit_to: string | null
+          deleted_at: string | null
           email: string | null
           governorate: string | null
           id: string
@@ -369,9 +432,11 @@ export type Database = {
           logo_url: string | null
           name_ar: string
           name_en: string | null
+          payment_methods: string[]
           phones: string[]
           rating: number
           ratings_count: number
+          shop_number: string | null
           slug: string | null
           street: string | null
           suspend_reason: string | null
@@ -388,12 +453,16 @@ export type Database = {
           block?: string | null
           commercial_register?: string | null
           commission_rate?: number
+          contract_from?: string | null
+          contract_number?: string | null
+          contract_to?: string | null
           cover_url?: string | null
           created_at?: string
           created_by?: string | null
           credit_from?: string | null
           credit_limit?: number | null
           credit_to?: string | null
+          deleted_at?: string | null
           email?: string | null
           governorate?: string | null
           id?: string
@@ -404,9 +473,11 @@ export type Database = {
           logo_url?: string | null
           name_ar: string
           name_en?: string | null
+          payment_methods?: string[]
           phones?: string[]
           rating?: number
           ratings_count?: number
+          shop_number?: string | null
           slug?: string | null
           street?: string | null
           suspend_reason?: string | null
@@ -423,12 +494,16 @@ export type Database = {
           block?: string | null
           commercial_register?: string | null
           commission_rate?: number
+          contract_from?: string | null
+          contract_number?: string | null
+          contract_to?: string | null
           cover_url?: string | null
           created_at?: string
           created_by?: string | null
           credit_from?: string | null
           credit_limit?: number | null
           credit_to?: string | null
+          deleted_at?: string | null
           email?: string | null
           governorate?: string | null
           id?: string
@@ -439,9 +514,11 @@ export type Database = {
           logo_url?: string | null
           name_ar?: string
           name_en?: string | null
+          payment_methods?: string[]
           phones?: string[]
           rating?: number
           ratings_count?: number
+          shop_number?: string | null
           slug?: string | null
           street?: string | null
           suspend_reason?: string | null
@@ -1697,6 +1774,73 @@ export type Database = {
           },
         ]
       }
+      platform_fees: {
+        Row: {
+          amount: number
+          collected_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          note: string | null
+          order_id: string | null
+          period_end: string | null
+          period_start: string | null
+          return_id: string | null
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["billing_subject"]
+        }
+        Insert: {
+          amount: number
+          collected_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          note?: string | null
+          order_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          return_id?: string | null
+          subject_id: string
+          subject_type: Database["public"]["Enums"]["billing_subject"]
+        }
+        Update: {
+          amount?: number
+          collected_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          note?: string | null
+          order_id?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          return_id?: string | null
+          subject_id?: string
+          subject_type?: Database["public"]["Enums"]["billing_subject"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_fees_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fees_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_fees_return_id_fkey"
+            columns: ["return_id"]
+            isOneToOne: false
+            referencedRelation: "return_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       price_rules: {
         Row: {
           adjustment_type: Database["public"]["Enums"]["discount_type"]
@@ -1770,6 +1914,52 @@ export type Database = {
           },
           {
             foreignKeyName: "price_rules_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_placements: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          id: string
+          product_id: string
+          specialty_id: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          product_id: string
+          specialty_id: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          product_id?: string
+          specialty_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_placements_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_placements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_placements_specialty_id_fkey"
             columns: ["specialty_id"]
             isOneToOne: false
             referencedRelation: "specialties"
@@ -1854,6 +2044,39 @@ export type Database = {
           },
         ]
       }
+      product_specialties: {
+        Row: {
+          created_at: string
+          product_id: string
+          specialty_id: string
+        }
+        Insert: {
+          created_at?: string
+          product_id: string
+          specialty_id: string
+        }
+        Update: {
+          created_at?: string
+          product_id?: string
+          specialty_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_specialties_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_specialties_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_submissions: {
         Row: {
           admin_note: string | null
@@ -1933,39 +2156,6 @@ export type Database = {
             columns: ["unit_id"]
             isOneToOne: false
             referencedRelation: "units"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      product_specialties: {
-        Row: {
-          created_at: string
-          product_id: string
-          specialty_id: string
-        }
-        Insert: {
-          created_at?: string
-          product_id: string
-          specialty_id: string
-        }
-        Update: {
-          created_at?: string
-          product_id?: string
-          specialty_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "product_specialties_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "product_specialties_specialty_id_fkey"
-            columns: ["specialty_id"]
-            isOneToOne: false
-            referencedRelation: "specialties"
             referencedColumns: ["id"]
           },
         ]
@@ -2596,9 +2786,10 @@ export type Database = {
       }
       seller_buyer_credit: {
         Row: {
-          buyer_company_id: string
+          buyer_company_id: string | null
+          buyer_user_id: string | null
           created_at: string
-          credit_limit: number
+          credit_limit: number | null
           ends_on: string | null
           id: string
           is_active: boolean
@@ -2607,9 +2798,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          buyer_company_id: string
+          buyer_company_id?: string | null
+          buyer_user_id?: string | null
           created_at?: string
-          credit_limit: number
+          credit_limit?: number | null
           ends_on?: string | null
           id?: string
           is_active?: boolean
@@ -2618,9 +2810,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          buyer_company_id?: string
+          buyer_company_id?: string | null
+          buyer_user_id?: string | null
           created_at?: string
-          credit_limit?: number
+          credit_limit?: number | null
           ends_on?: string | null
           id?: string
           is_active?: boolean
@@ -2634,6 +2827,13 @@ export type Database = {
             columns: ["buyer_company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_buyer_credit_buyer_user_id_fkey"
+            columns: ["buyer_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -2827,6 +3027,39 @@ export type Database = {
           },
         ]
       }
+      seller_specialties: {
+        Row: {
+          company_id: string
+          created_at: string
+          specialty_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          specialty_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          specialty_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_specialties_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_specialties_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sites: {
         Row: {
           address_line: string | null
@@ -2843,6 +3076,7 @@ export type Database = {
           manager_name: string | null
           manager_phone: string | null
           name: string
+          plot: string | null
           street: string | null
           updated_at: string
         }
@@ -2861,6 +3095,7 @@ export type Database = {
           manager_name?: string | null
           manager_phone?: string | null
           name: string
+          plot?: string | null
           street?: string | null
           updated_at?: string
         }
@@ -2879,6 +3114,7 @@ export type Database = {
           manager_name?: string | null
           manager_phone?: string | null
           name?: string
+          plot?: string | null
           street?: string | null
           updated_at?: string
         }
@@ -3227,6 +3463,28 @@ export type Database = {
       }
     }
     Views: {
+      company_specialties: {
+        Row: {
+          company_id: string | null
+          specialty_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_specialties_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_products_seller_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mv_customer_top_products: {
         Row: {
           customer_key: string | null
@@ -3394,6 +3652,40 @@ export type Database = {
           },
         ]
       }
+      v_product_placements: {
+        Row: {
+          category_id: string | null
+          id: string | null
+          is_primary: boolean | null
+          path: string[] | null
+          product_id: string | null
+          specialty_id: string | null
+          specialty_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_placements_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_placements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_placements_specialty_id_fkey"
+            columns: ["specialty_id"]
+            isOneToOne: false
+            referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_cheapest_offer_to_cart: {
@@ -3452,10 +3744,6 @@ export type Database = {
         Args: { p_from?: string; p_kind: string; p_to?: string }
         Returns: Json
       }
-      admin_buyer_dashboard: {
-        Args: { p_profile_id: string }
-        Returns: Json
-      }
       admin_activate_seller: {
         Args: {
           p_commercial_register?: string
@@ -3466,6 +3754,14 @@ export type Database = {
         }
         Returns: string
       }
+      admin_assign_company_products: {
+        Args: {
+          p_company_id: string
+          p_origin_country?: string
+          p_product_ids: string[]
+        }
+        Returns: number
+      }
       admin_broadcast: {
         Args: {
           p_body_ar?: string
@@ -3473,6 +3769,25 @@ export type Database = {
           p_title_ar: string
         }
         Returns: number
+      }
+      admin_buyer_company_dashboard: {
+        Args: { p_company_id: string; p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_buyer_dashboard: {
+        Args: { p_from?: string; p_profile_id: string; p_to?: string }
+        Returns: Json
+      }
+      admin_collect_subscription: {
+        Args: {
+          p_amount: number
+          p_note?: string
+          p_period_end?: string
+          p_period_start?: string
+          p_subject_id: string
+          p_subject_type: string
+        }
+        Returns: string
       }
       admin_complete_individual_buyer: {
         Args: {
@@ -3506,10 +3821,6 @@ export type Database = {
           p_phone?: string
         }
         Returns: string
-      }
-      admin_assign_company_products: {
-        Args: { p_company_id: string; p_product_ids: string[] }
-        Returns: number
       }
       admin_dashboard_stats: { Args: never; Returns: Json }
       admin_decide_product_request: {
@@ -3547,6 +3858,37 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      admin_delete_account: {
+        Args: { p_profile_id: string; p_reason?: string }
+        Returns: Json
+      }
+      admin_delete_company: {
+        Args: { p_company_id: string; p_reason?: string }
+        Returns: Json
+      }
+      admin_delete_products: { Args: { p_ids: string[] }; Returns: Json }
+      admin_delete_return_reason: {
+        Args: { p_code: string }
+        Returns: undefined
+      }
+      admin_finance_returns: {
+        Args: {
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_to?: string
+        }
+        Returns: Json
+      }
+      admin_finance_stats: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_finance_summary: {
+        Args: { p_from?: string; p_subject_type: string; p_to?: string }
+        Returns: Json
       }
       admin_invoices_list: {
         Args: {
@@ -3618,12 +3960,12 @@ export type Database = {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
       }
-      admin_seller_dashboard: {
-        Args: { p_company_id: string }
-        Returns: Json
-      }
       admin_sales_series: {
         Args: { p_from: string; p_to: string }
+        Returns: Json
+      }
+      admin_seller_dashboard: {
+        Args: { p_company_id: string; p_from?: string; p_to?: string }
         Returns: Json
       }
       admin_set_account_status: {
@@ -3632,6 +3974,20 @@ export type Database = {
           p_status: Database["public"]["Enums"]["account_status"]
         }
         Returns: undefined
+      }
+      admin_set_billing_plan: {
+        Args: {
+          p_cycles?: number
+          p_ends_on?: string
+          p_fee?: number
+          p_kind: string
+          p_note?: string
+          p_rate?: number
+          p_starts_on?: string
+          p_subject_id: string
+          p_subject_type: string
+        }
+        Returns: string
       }
       admin_set_company_commission: {
         Args: { p_company_id: string; p_rate: number }
@@ -3748,6 +4104,7 @@ export type Database = {
           site_code: string
           site_id: string
           site_name: string
+          site_plot: string
           sku: string
           total_amount: unknown
           unit_ar: string
@@ -3947,6 +4304,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_support_ticket: {
+        Args: { p_body: string; p_category?: string; p_subject: string }
+        Returns: {
+          id: string
+          ticket_number: string
+        }[]
+      }
       decide_return: {
         Args: {
           p_decisions: Json
@@ -3987,6 +4351,13 @@ export type Database = {
       delete_my_account: { Args: never; Returns: undefined }
       issue_draft_quotation: { Args: { p_valid_until?: string }; Returns: Json }
       list_favorite_products: { Args: never; Returns: Json }
+      login_email_by_phone: {
+        Args: { p_digits: string }
+        Returns: {
+          email: string
+          id: string
+        }[]
+      }
       pay_order: {
         Args: {
           p_expected_total: unknown
@@ -4215,7 +4586,9 @@ export type Database = {
           buyer_kind: string
           company_code: string
           id: string
+          is_customer: boolean
           name_ar: string
+          orders_count: number
           total_count: number
         }[]
       }
@@ -4226,6 +4599,7 @@ export type Database = {
           image_url: string
           is_active: boolean
           name_ar: string
+          origin_country: string
           price: unknown
           product_id: string
           seller_product_id: string
@@ -4235,10 +4609,26 @@ export type Database = {
           unit_ar: string
         }[]
       }
+      seller_category_tree: {
+        Args: { p_specialty_id?: string }
+        Returns: {
+          category_id: string
+          depth: number
+          direct_count: number
+          image_url: string
+          name_ar: string
+          parent_id: string
+          specialty_id: string
+          specialty_name: string
+          subtree_count: number
+        }[]
+      }
       seller_credit_list: {
         Args: { p_search?: string; p_sort?: string }
         Returns: {
           buyer_company_id: string
+          buyer_kind: string
+          buyer_user_id: string
           company_code: string
           company_label: string
           credit_limit: unknown
@@ -4332,6 +4722,7 @@ export type Database = {
       }
       seller_orders_list: {
         Args: {
+          p_include_cancelled?: boolean
           p_limit?: number
           p_offset?: number
           p_search?: string
@@ -4340,12 +4731,16 @@ export type Database = {
         Returns: {
           buyer_code: string
           buyer_label: string
+          cancelled_count: number
           created_at: string
+          done_count: number
           grand_total: unknown
           id: string
           invoice_id: string
           items_count: number
           order_number: string
+          quoted_count: number
+          review_count: number
           review_due_at: string
           status: Database["public"]["Enums"]["order_status"]
           total_count: number
@@ -4486,6 +4881,7 @@ export type Database = {
           site_code: string
           site_id: string
           site_name: string
+          site_plot: string
           sku: string
           total_amount: unknown
           unit_ar: string
@@ -4501,6 +4897,19 @@ export type Database = {
           orders_count: number
           sites_count: number
           total_amount: unknown
+        }[]
+      }
+      seller_report_specialty_performance: {
+        Args: { p_from?: string; p_search?: string; p_to?: string }
+        Returns: {
+          image_url: string
+          items_count: number
+          listed_count: number
+          name_ar: string
+          orders_count: number
+          specialty_id: string
+          total_amount: unknown
+          units_qty: number
         }[]
       }
       seller_report_top_customers: {
@@ -4634,16 +5043,18 @@ export type Database = {
       }
       seller_set_credit: {
         Args: {
-          p_buyer_company_id: string
-          p_credit_limit: unknown
+          p_buyer_company_id?: string
+          p_buyer_user_id?: string
+          p_credit_limit?: unknown
           p_ends_on?: string
           p_id?: string
-          p_starts_on: string
+          p_starts_on?: string
         }
         Returns: {
-          buyer_company_id: string
+          buyer_company_id: string | null
+          buyer_user_id: string | null
           created_at: string
-          credit_limit: number
+          credit_limit: number | null
           ends_on: string | null
           id: string
           is_active: boolean
@@ -4746,6 +5157,10 @@ export type Database = {
         Args: { p_invoice_id: string; p_path: string }
         Returns: string
       }
+      set_return_attachments: {
+        Args: { p_paths: string[]; p_return_id: string }
+        Returns: undefined
+      }
       update_draft_quotation_item: {
         Args: { p_item_id: string; p_preferred_origin?: string; p_qty: unknown }
         Returns: Json
@@ -4753,6 +5168,8 @@ export type Database = {
     }
     Enums: {
       account_status: "pending" | "active" | "suspended" | "rejected"
+      billing_kind: "commission" | "subscription"
+      billing_subject: "individual_buyer" | "company_buyer" | "seller"
       company_type: "buyer" | "seller"
       discount_scope: "all" | "specialty" | "category" | "product"
       discount_type: "percentage" | "fixed"
@@ -4842,12 +5259,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4871,11 +5288,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4896,11 +5313,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4921,11 +5338,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4938,11 +5355,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4955,6 +5372,8 @@ export const Constants = {
   public: {
     Enums: {
       account_status: ["pending", "active", "suspended", "rejected"],
+      billing_kind: ["commission", "subscription"],
+      billing_subject: ["individual_buyer", "company_buyer", "seller"],
       company_type: ["buyer", "seller"],
       discount_scope: ["all", "specialty", "category", "product"],
       discount_type: ["percentage", "fixed"],
