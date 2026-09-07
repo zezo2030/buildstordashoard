@@ -230,6 +230,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
   const [form, setForm] = useState({
     source_code: product?.source_code ?? '',
     name_ar: product?.name_ar ?? '',
+    brand: product?.brand ?? '',
     image_url: product?.images?.[0] ?? '',
     unit_id: '',
   });
@@ -318,6 +319,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
         sku: product?.sku ?? skuFromSourceCode(form.source_code),
         source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
+        brand: form.brand.trim() || null,
         specialty_id: primary.specialtyId,
         category_id: primary.categoryId,
         unit_id: form.unit_id,
@@ -402,6 +404,9 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
                 <option key={u.id} value={u.id}>{u.name_ar}</option>
               ))}
             </Select>
+          </Field>
+          <Field label="الماركة">
+            <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
           </Field>
         </div>
         {/* بلد المنشأ اتشال من المادة: هو خاصية عرض البائع (نفس المادة بمناشئ

@@ -130,18 +130,46 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 const inputCls =
-  'w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-primary placeholder:text-subtext focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+  'rounded-lg border border-line bg-white px-3 py-2 text-sm text-primary placeholder:text-subtext focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20';
+
+/**
+ * العرض الافتراضي `w-full` إلا لو المُنادي حدّد عرضه بنفسه.
+ *
+ * كان الأساس بيحط `w-full` دايمًا، و`w-72` الجاية من الشاشة بتتحط بعدها في نص
+ * الكلاس — بس ترتيب النص مالوش أي أثر في CSS، والأسبقية بتترتب حسب ترتيب
+ * التوليد في ملف الستايل، فـ`w-full` كانت بتكسب. النتيجة: كل صفوف الفلاتر
+ * (المرتجعات، الفواتير، الحسابات، المال) كانت بتتكدّس عموديًا بعرض الصفحة
+ * كاملة بدل ما تقف في سطر واحد.
+ */
+export function inputWidthCls(className?: string): string {
+  return /(^|\s)(w-|min-w-|max-w-|size-|flex-1)/.test(className ?? '') ? '' : 'w-full';
+}
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${inputCls} ${props.className ?? ''}`} />;
+  return (
+    <input
+      {...props}
+      className={`${inputWidthCls(props.className)} ${inputCls} ${props.className ?? ''}`}
+    />
+  );
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`${inputCls} ${props.className ?? ''}`} />;
+  return (
+    <select
+      {...props}
+      className={`${inputWidthCls(props.className)} ${inputCls} ${props.className ?? ''}`}
+    />
+  );
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`${inputCls} min-h-24 ${props.className ?? ''}`} />;
+  return (
+    <textarea
+      {...props}
+      className={`${inputWidthCls(props.className)} ${inputCls} min-h-24 ${props.className ?? ''}`}
+    />
+  );
 }
 
 /** مفتاح تفعيل أخضر — مطابق لتصميم Figma */
