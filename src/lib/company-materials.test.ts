@@ -61,6 +61,33 @@ describe('filterCatalogForBulkAdd', () => {
   });
 });
 
+describe('filterCatalogForBulkAdd — المنشأ جزء من مفتاح العرض', () => {
+  const offers = [
+    { product_id: 'p1', origin_country: 'كويتي' },
+    { product_id: 'p2', origin_country: null },
+  ];
+
+  it('يخفي المادة المضافة بنفس المنشأ بس', () => {
+    expect(filterCatalogForBulkAdd(catalog, offers, '', 'all', 'كويتي').map((p) => p.id))
+      .toEqual(['p2', 'p3']);
+  });
+
+  it('يظهر نفس المادة لمنشأ مختلف', () => {
+    expect(filterCatalogForBulkAdd(catalog, offers, '', 'all', 'سعودي').map((p) => p.id))
+      .toEqual(['p1', 'p2', 'p3']);
+  });
+
+  it('من غير منشأ: يخفي عروض المنشأ الفاضي بس', () => {
+    expect(filterCatalogForBulkAdd(catalog, offers, '', 'all').map((p) => p.id))
+      .toEqual(['p1', 'p3']);
+  });
+
+  it('يتجاهل المسافات حوالين المنشأ', () => {
+    expect(filterCatalogForBulkAdd(catalog, offers, '', 'all', '  كويتي  ').map((p) => p.id))
+      .toEqual(['p2', 'p3']);
+  });
+});
+
 describe('chunkIds', () => {
   it('يقسّم على سقف الـRPC', () => {
     const ids = Array.from({ length: ADMIN_ASSIGN_CHUNK + 2 }, (_, i) => `p${i}`);

@@ -30,16 +30,53 @@ export function toAssignedProductIdSet(cache: unknown): Set<string> {
   return ids;
 }
 
+/** المنشأ الفاضي = null في القاعدة؛ بنوحّده لنص فاضي عشان المقارنة. */
+export function normalizeOrigin(origin: string | null | undefined): string {
+  return (origin ?? '').trim();
+}
+
+/**
+ * مفتاح العرض بقى (منتج + منشأ) مش المنتج لوحده — الشركة ممكن يكون عندها نفس
+ * المادة بأكتر من منشأ. بنرجّع مجموعة `productId|origin` عشان قايمة الإضافة
+ * تخفي المادة اللي مضافة **بنفس المنشأ** بس.
+ */
+export function assignedOfferKeys(cache: unknown): Set<string> {
+  if (!Array.isArray(cache)) {
+    return new Set([...toAssignedProductIdSet(cache)].map((id) => `${id}|`));
+  }
+  const keys = new Set<string>();
+  for (const item of cache) {
+    if (typeof item === 'string') {
+      keys.add(`${item}|`);
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const row = item as {
+      product_id?: unknown;
+      product?: { id?: unknown };
+      origin_country?: unknown;
+    };
+    const id = typeof row.product_id === 'string'
+      ? row.product_id
+      : (typeof row.product?.id === 'string' ? row.product.id : null);
+    if (!id) continue;
+    keys.add(`${id}|${normalizeOrigin(typeof row.origin_country === 'string' ? row.origin_country : null)}`);
+  }
+  return keys;
+}
+
 export function filterCatalogForBulkAdd(
   catalog: BulkCatalogProduct[],
   assignedCache: unknown,
   search: string,
   specialty: string,
+  origin: string = '',
 ): BulkCatalogProduct[] {
-  const assigned = toAssignedProductIdSet(assignedCache);
+  const assigned = assignedOfferKeys(assignedCache);
+  const originKey = normalizeOrigin(origin);
   const term = search.trim().toLocaleLowerCase();
   return catalog.filter((p) => {
-    if (assigned.has(p.id)) return false;
+    if (assigned.has(`${p.id}|${originKey}`)) return false;
     if (specialty !== 'all' && !productInSpecialty(p.specialty_id, p.specialty_ids, specialty)) return false;
     if (!term) return true;
     return p.name_ar.toLocaleLowerCase().includes(term) || p.sku.toLocaleLowerCase().includes(term);
