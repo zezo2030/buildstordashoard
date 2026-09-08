@@ -22,14 +22,18 @@ import {
   topRows,
   type AmountRow,
   type BuyerDashboard,
+  type CountRow,
+  type GroupRows,
   type NamedTotal,
   type PieSlice,
+  type ReturnBrief,
   type SellerDashboard,
 } from '../lib/account-dashboard';
-import { Card, ErrorState, KpiCard, Money, Spinner } from './ui';
+import { Card, ErrorState, KpiCard, Money, Spinner, StatusChip } from './ui';
 import { Modal } from './Modal';
 import { DateRangePicker } from './DateRangePicker';
-import { money, qty } from '../lib/format';
+import { fmtDateTime, money, qty } from '../lib/format';
+import { returnStatusLabels, labelOf } from '../lib/labels';
 
 /**
  * صف قابل للعرض في كارت مصغّر أو في مودال «عرض الكل». `qtyLabel` بتتعرض
@@ -166,9 +170,22 @@ function SellerStatsBody({ d }: { d: SellerDashboard }) {
         />
         <MiniCard
           title="أكثر المواقع شراءً"
+          hint="مواقع المشاريع وعناوين التوصيل اللي اتسلّمت عليها الطلبات"
           rows={d.sites.map((s) => asListed(s))}
         />
       </div>
+      {/* نفس تقارير واجهة البائع في التطبيق: المنتجات لكل عميل ولكل موقع،
+          وعدد الطلبات والمواد بدل المبلغ. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <GroupCard title="أكثر المنتجات شراءً لكل عميل" groups={d.productsByCustomer} />
+        <GroupCard title="أكثر المنتجات شراءً لكل موقع" groups={d.productsBySite} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <CountCard title="عدد المواد في كل تخصص" unitLabel="مادة" rows={d.specialtyItems} />
+        <CountCard title="عدد الطلبات لكل موقع" unitLabel="طلب" rows={d.siteOrders} />
+        <CountCard title="عدد الطلبات لكل عميل" unitLabel="طلب" rows={d.customerOrders} />
+      </div>
+      <ReturnsCard title="المرتجعات" partyLabel="المشتري" rows={d.returns} />
     </>
   );
 }
@@ -198,9 +215,19 @@ function BuyerStatsBody({ d }: { d: BuyerDashboard }) {
         />
         <MiniCard
           title="أكثر المواقع شراءً"
+          hint="مواقع المشاريع وعناوين التوصيل اللي اتسلّمت عليها الطلبات"
           rows={d.sites.map((s) => asListed(s))}
         />
       </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <GroupCard title="أكثر المنتجات شراءً من كل مورّد" groups={d.productsBySupplier} />
+        <GroupCard title="أكثر المنتجات شراءً لكل موقع" groups={d.productsBySite} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CountCard title="عدد المواد في كل تخصص" unitLabel="مادة" rows={d.specialtyItems} />
+        <CountCard title="عدد الطلبات لكل موقع" unitLabel="طلب" rows={d.siteOrders} />
+      </div>
+      <ReturnsCard title="المرتجعات" partyLabel="البائع" rows={d.returns} />
     </>
   );
 }
@@ -289,13 +316,167 @@ function LegendRow({ slice, total, index }: { slice: PieSlice; total: number; in
   );
 }
 
-function MiniCard({ title, rows }: { title: string; rows: Listed[] }) {
+/**
+ * كارت مقياسه عدد: «عدد المواد في كل تخصص»، «عدد الطلبات لكل موقع». الرقم
+ * الملوّن هو العدد، والمبلغ جنبه سياق — عشان الترتيب هنا مش على الفلوس.
+ */
+function CountCard({ title, unitLabel, rows }: { title: string; unitLabel: string; rows: CountRow[] }) {
   const [open, setOpen] = useState(false);
   const shown = topRows(rows);
+
+  const body = (list: CountRow[]) => (
+    <ol className="divide-y divide-line">
+      {list.map((row, i) => (
+        <li key={row.id} className="flex items-center gap-2 py-2 text-sm">
+          <span className="w-5 shrink-0 tabular-nums text-subtext">{i + 1}</span>
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium">{row.name}</div>
+            {row.note ? <div className="truncate text-xs text-subtext">{row.note}</div> : null}
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-[#3771C8]" dir="ltr">
+            {row.count} {unitLabel}
+          </span>
+          <span className="shrink-0 text-xs"><Money value={row.total} /></span>
+        </li>
+      ))}
+    </ol>
+  );
+
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="font-bold">{title}</h3>
+        <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-8 text-center text-sm text-subtext">لا توجد بيانات</p>
+      ) : (
+        body(shown)
+      )}
+      <Modal title={title} open={open} onClose={() => setOpen(false)} wide>
+        {body(rows)}
+      </Modal>
+    </Card>
+  );
+}
+
+/**
+ * طرف واحد وتحته منتجاته. الكارت بيعرض الأطراف بإجمالياتهم، والضغط على طرف
+ * بيفتح منتجاته — بدل ما نرمي جدول مسطّح فيه الطرف مكرر مع كل منتج.
+ */
+function GroupCard({ title, groups }: { title: string; groups: GroupRows[] }) {
+  const [openGroup, setOpenGroup] = useState<GroupRows | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const shown = topRows(groups);
+
+  const list = (items: GroupRows[]) => (
+    <ol className="divide-y divide-line">
+      {items.map((g, i) => (
+        <li key={g.id}>
+          <button
+            type="button"
+            onClick={() => setOpenGroup(g)}
+            className="flex w-full items-center gap-2 py-2 text-start text-sm hover:bg-surface"
+          >
+            <span className="w-5 shrink-0 tabular-nums text-subtext">{i + 1}</span>
+            {g.imageUrl ? (
+              <img src={g.imageUrl} alt="" className="size-8 shrink-0 rounded-md object-contain ring-1 ring-line" />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{g.name}</div>
+              <div className="truncate text-xs text-subtext">
+                {g.note ? `${g.note} · ` : ''}{g.rows.length} مادة
+              </div>
+            </div>
+            <span className="shrink-0 text-xs"><Money value={g.total} /></span>
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-bold">{title}</h3>
+        <ShowAll total={groups.length} visible={shown.length} onClick={() => setShowAll(true)} />
+      </div>
+      {groups.length === 0 ? (
+        <p className="py-8 text-center text-sm text-subtext">لا توجد بيانات</p>
+      ) : (
+        list(shown)
+      )}
+
+      <Modal title={title} open={showAll} onClose={() => setShowAll(false)} wide>
+        {list(groups)}
+      </Modal>
+
+      <Modal
+        title={openGroup ? `${title} — ${openGroup.name}` : title}
+        open={!!openGroup}
+        onClose={() => setOpenGroup(null)}
+        wide
+      >
+        <ListedRows rows={(openGroup?.rows ?? []).map((r) => asListed(r, true))} />
+      </Modal>
+    </Card>
+  );
+}
+
+/** مرتجعات الحساب في فترة الفلتر — نفس حالات صفحة المرتجعات. */
+function ReturnsCard({ title, partyLabel, rows }: { title: string; partyLabel: string; rows: ReturnBrief[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = topRows(rows);
+
+  const body = (list: ReturnBrief[]) => (
+    <ol className="divide-y divide-line">
+      {list.map((r) => {
+        const l = labelOf(returnStatusLabels, r.status);
+        return (
+          <li key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+            <span className="font-medium" dir="ltr">{r.number}</span>
+            {r.orderNumber && <span className="text-xs text-subtext" dir="ltr">{r.orderNumber}</span>}
+            <span className="min-w-0 flex-1 truncate text-xs text-subtext">
+              {partyLabel}: {r.party || '—'}
+            </span>
+            <span className="shrink-0 text-xs tabular-nums text-subtext" dir="ltr">{r.count} مادة</span>
+            <StatusChip label={l.label} tone={l.tone} />
+            <span className="shrink-0 text-xs"><Money value={r.total} /></span>
+            <span className="shrink-0 text-xs text-subtext">{fmtDateTime(r.at)}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-bold">{title}</h3>
+        <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
+      </div>
+      {rows.length === 0 ? (
+        <p className="py-8 text-center text-sm text-subtext">لا توجد مرتجعات في الفترة</p>
+      ) : (
+        body(shown)
+      )}
+      <Modal title={title} open={open} onClose={() => setOpen(false)} wide>
+        {body(rows)}
+      </Modal>
+    </Card>
+  );
+}
+
+function MiniCard({ title, hint, rows }: { title: string; hint?: string; rows: Listed[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = topRows(rows);
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="font-bold">{title}</h3>
+          {hint && <p className="mt-0.5 text-[11px] text-subtext">{hint}</p>}
+        </div>
         <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
       </div>
       {rows.length === 0 ? (

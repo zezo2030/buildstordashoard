@@ -28,3 +28,12 @@ supabase db pull
 
 > ملاحظة: إضافة وسيط بقيمة افتراضية لدالة موجودة بتعمل **دالة جديدة** جنب
 > القديمة، والاستدعاء بيبقى ملتبس — لازم `drop function` للتوقيع القديم بعدها.
+
+## هجرات ملاحظات لوحة التحكم 002 — 2026-09-08
+
+| الإصدار | الاسم | اللي بيعمله |
+| --- | --- | --- |
+| 20260908090000 | `admin_catalog_deletes_and_products_list` | `admin_delete_specialty` و`admin_delete_unit` (بيرفضوا الحذف ويقولوا السبب بالعربي) + `admin_products_list` بفلتر عدد عروض البائعين |
+| 20260908090500 | `orders_current_scope` | `p_scope` (`current`/`archived`/`all`) في `app.orders_rows` و`admin_orders_list` — الافتراضي «الجاري»، والتوقيعين القدام اتدروبوا |
+| 20260908091000 | `account_dashboard_sites_and_reports` | `app.order_site` (الموقع = موقع مسجّل أو عنوان توصيل) + `app.buyer_dashboard_json` و`admin_seller_dashboard` بتقارير المنتجات لكل طرف/موقع وعدد المواد والطلبات والمرتجعات |
+| 20260908091500 | `billing_expiry_and_finance_return_order` | `admin_expiring_billing_plans` + `order_id` في صفوف `admin_finance_returns` |

@@ -1,21 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  materialsBadgeCount,
-  materialsTabFromSearch,
-  sellerSubmissionSections,
-} from './materials-requests';
-
-describe('materialsTabFromSearch', () => {
-  it('يفتح تاب البائعين لما tab=sellers', () => {
-    expect(materialsTabFromSearch('?tab=sellers')).toBe('sellers');
-  });
-
-  it('يفتح تاب المشترين لأي قيمة تانية أو من غير باراميتر', () => {
-    expect(materialsTabFromSearch('')).toBe('buyers');
-    expect(materialsTabFromSearch('?tab=buyers')).toBe('buyers');
-    expect(materialsTabFromSearch('?tab=foo')).toBe('buyers');
-  });
-});
+import { sellerSubmissionSections } from './materials-requests';
 
 describe('sellerSubmissionSections', () => {
   it('يرجّع كل أقسام فورم البائع بالترتيب وبالقيم اللي اتبعتت', () => {
@@ -62,12 +46,5 @@ describe('sellerSubmissionSections', () => {
     expect(sections.find((s) => s.label === 'الماركة')?.value).toBe('—');
     expect(sections.find((s) => s.label === 'البائع')?.value).toBe('—');
     expect(sections).toHaveLength(9);
-  });
-});
-
-describe('materialsBadgeCount', () => {
-  it('يجمع الطلبات المفتوحة مع اقتراحات البائعين المفتوحة', () => {
-    expect(materialsBadgeCount(2, 3)).toBe(5);
-    expect(materialsBadgeCount(0, 0)).toBe(0);
   });
 });

@@ -22,6 +22,7 @@ import {
 } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
+import { ReturnDetailsModal } from '../components/ReturnDetailsModal';
 import { BillingCell, billingPeriod, billingSummary } from './accounts/BillingCell';
 import { fmtDate, fmtDateTime, money } from '../lib/format';
 import { localPhone } from '../lib/format';
@@ -269,6 +270,7 @@ function ReturnsTab({ range }: { range: DateRange }) {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<FinanceReturnRow | null>(null);
 
   useEffect(() => {
     if (search === debounced) return;
@@ -336,6 +338,7 @@ function ReturnsTab({ range }: { range: DateRange }) {
           onChange={(e) => setSearch(e.target.value)}
           className="w-72"
         />
+        <span className="text-xs text-subtext">اضغط على أي صف لعرض المواد المرتجعة وتفاصيل السند</span>
         <Btn
           variant="ghost"
           disabled={rows.length === 0}
@@ -365,8 +368,27 @@ function ReturnsTab({ range }: { range: DateRange }) {
         page={page}
         hasMore={(page + 1) * PAGE_SIZE < (q.data?.total ?? 0)}
         onPage={setPage}
+        onRowClick={setSelected}
         emptyTitle="لا توجد مرتجعات في الفترة"
       />
+      {/* قراءة بس — القرار على البنود وتعليم الاستلام مكانهم صفحة المرتجعات */}
+      {selected && (
+        <ReturnDetailsModal
+          readOnly
+          row={{
+            id: selected.id,
+            returnNumber: selected.returnNumber,
+            status: selected.status,
+            orderId: selected.orderId,
+            orderNumber: selected.orderNumber,
+            buyerName: selected.buyerName,
+            sellerName: selected.sellerName,
+            refundAmount: selected.refundAmount,
+            requestedAt: selected.executedAt,
+          }}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

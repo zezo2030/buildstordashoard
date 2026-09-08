@@ -8,7 +8,6 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { materialsBadgeCount } from '../lib/materials-requests';
 import { useAdmin } from './Guard';
 
 function useBadges() {
@@ -16,16 +15,14 @@ function useBadges() {
     queryKey: ['nav-badges'],
     refetchInterval: 60_000,
     queryFn: async () => {
-      const [sellers, tickets, requests, submissions] = await Promise.all([
+      const [sellers, tickets, submissions] = await Promise.all([
         supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'seller').eq('status', 'pending'),
         supabase.from('support_tickets').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
-        supabase.from('product_requests').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('product_submissions').select('*', { count: 'exact', head: true }).eq('status', 'open'),
       ]);
       return {
         sellers: sellers.count ?? 0,
         tickets: tickets.count ?? 0,
-        requests: requests.count ?? 0,
         submissions: submissions.count ?? 0,
       };
     },
@@ -86,7 +83,7 @@ export function Shell() {
     {
       title: 'الحسابات',
       items: [
-        { to: '/requests/materials', label: 'طلبات المواد', icon: <FileSpreadsheet size={17} strokeWidth={1.75} />, badge: materialsBadgeCount(badges?.requests ?? 0, badges?.submissions ?? 0) },
+        { to: '/requests/materials', label: 'طلبات المواد', icon: <FileSpreadsheet size={17} strokeWidth={1.75} />, badge: badges?.submissions },
         { to: '/accounts/individuals', label: 'مشتري فرد', icon: <UserRound size={17} strokeWidth={1.75} /> },
         { to: '/accounts/companies', label: 'مشتري شركة', icon: <Building2 size={17} strokeWidth={1.75} /> },
         { to: '/accounts/sellers', label: 'البائعون', icon: <Store size={17} strokeWidth={1.75} />, badge: badges?.sellers },

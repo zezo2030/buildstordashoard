@@ -167,7 +167,9 @@ export function BillingPlanDialog({ subject, subjectId, name, current, onClose }
             <Input dir="ltr" type="date" value={to} min={from || undefined}
               onChange={(e) => setTo(e.target.value)} />
           </Field>
-          <Field label="عدد الدورات" hint="بالشهور">
+          {/* رقم توثيقي: بيتخزّن مع الخطة ولا يحرّك تحصيلًا تلقائيًا — التحصيل
+              لسه يدوي، فالحقل بيقول الاتفاق كام دورة بس. */}
+          <Field label="عدد الدورات" hint="عدد الشهور المتفق عليها — للتوثيق، التحصيل يدوي">
             <Input dir="ltr" type="number" min={1} step="1" value={cycles}
               onChange={(e) => setCycles(e.target.value)} />
           </Field>

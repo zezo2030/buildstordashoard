@@ -1,10 +1,14 @@
 // المنتجات (الكتالوج المشترك — SKU واحد لكل مادة) + عروض البائعين عليها.
 // المنتج ممكن يبقى في أكتر من مكان في الشجرة (`product_placements`)، والجدول
 // بيعرض مسار المكان الأساسي كامل من التخصص الرئيسي لغاية آخر فئة.
-import { useRef, useState, type ChangeEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+//
+// القايمة بتيجي من `admin_products_list` مش من PostgREST مباشرة، عشان فلتر
+// «عدد عروض البائعين» يشتغل في الداتابيز والترقيم يفضل صح معاه.
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ImagePlus, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
+import { fetchProducts, OFFERS_FILTERS, type OffersFilter, type ProductRow } from '../api/products';
 import { uploadProductImage } from '../lib/product-image';
 import { skuFromSourceCode } from '../lib/catalog-sku';
 import { PageHeader, Btn, Field, Input, Select, Toggle, StatusChip, Money } from '../components/ui';
@@ -15,21 +19,6 @@ import { useToast } from '../components/Toast';
 import { productPathText, type PathCategory, type PathSpecialty } from '../lib/product-path';
 import { PlacementsField, savePlacements, specialtyNeedsCategory } from '../components/PlacementsField';
 import { normalizePlacements, type Placement } from '../lib/product-placements';
-
-type Row = {
-  id: string;
-  sku: string;
-  source_code: string | null;
-  name_ar: string;
-  brand: string | null;
-  images: string[];
-  is_active: boolean;
-  specialty_id?: string;
-  category_id?: string | null;
-  unit: { name_ar: string } | null;
-  seller_products: { count: number }[];
-  product_placements?: { specialty_id: string; category_id: string | null }[];
-};
 
 type CatalogTree = { specialties: PathSpecialty[]; categories: PathCategory[] };
 
@@ -55,47 +44,41 @@ export default function Products() {
   const { toast } = useToast();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [specialty, setSpecialty] = useState('all');
-  const [editing, setEditing] = useState<Row | 'new' | null>(null);
-  const [offersFor, setOffersFor] = useState<Row | null>(null);
+  const [offers, setOffers] = useState<OffersFilter>('all');
+  const [editing, setEditing] = useState<ProductRow | 'new' | null>(null);
+  const [offersFor, setOffersFor] = useState<ProductRow | null>(null);
   const [importing, setImporting] = useState(false);
 
   const { data: tree } = useCatalogTree();
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['products', search, specialty, page],
-    queryFn: async () => {
-      const linksSelect = specialty !== 'all'
-        ? 'product_placements!inner (specialty_id, category_id)'
-        : 'product_placements (specialty_id, category_id)';
-      let q = supabase
-        .from('products')
-        .select(
-          `id, sku, source_code, name_ar, brand, images, is_active, specialty_id, category_id,
-           unit:units (name_ar), seller_products (count), ${linksSelect}`,
-        )
-        .order('created_at', { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-      if (specialty !== 'all') q = q.eq('product_placements.specialty_id', specialty);
-      if (search.trim()) q = q.or(`name_ar.ilike.%${search.trim()}%,sku.ilike.%${search.trim()}%`);
-      const { data, error } = await q;
-      if (error) throw new Error(arError(error));
-      return data as unknown as Row[];
-    },
+  useEffect(() => {
+    if (search === debouncedSearch) return;
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0); }, 300);
+    return () => clearTimeout(t);
+  }, [search, debouncedSearch]);
+
+  const list = useQuery({
+    queryKey: ['products', debouncedSearch, specialty, offers, page],
+    queryFn: () => fetchProducts({
+      search: debouncedSearch, specialty, offers, page, pageSize: PAGE_SIZE,
+    }),
+    placeholderData: keepPreviousData,
   });
 
   const toggleActive = useMutation({
-    mutationFn: async (r: Row) => {
-      const { error } = await supabase.from('products').update({ is_active: !r.is_active }).eq('id', r.id);
+    mutationFn: async (r: ProductRow) => {
+      const { error } = await supabase.from('products').update({ is_active: !r.isActive }).eq('id', r.id);
       if (error) throw new Error(arError(error));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
     onError: (e) => toast('error', (e as Error).message),
   });
 
-  const rows = (data ?? []).slice(0, PAGE_SIZE);
+  const rows = list.data?.rows ?? [];
 
-  const columns: Column<Row>[] = [
+  const columns: Column<ProductRow>[] = [
     {
       key: 'name',
       header: 'المنتج',
@@ -111,7 +94,7 @@ export default function Products() {
             )}
           </div>
           <div>
-            <div className="font-medium">{r.name_ar}</div>
+            <div className="font-medium">{r.nameAr}</div>
             <div className="text-xs text-subtext" dir="ltr">{r.sku}</div>
           </div>
         </div>
@@ -124,13 +107,13 @@ export default function Products() {
       // المكان الأساسي بالكامل + عدد الأماكن الزيادة، عشان الأدمن يعرف المنتج
       // موجود فين من غير ما يفتح الفورم.
       render: (r) => {
-        const extra = Math.max(0, (r.product_placements?.length ?? 0) - 1);
+        const extra = Math.max(0, r.placements - 1);
         return (
           <div>
             <div>
               {productPathText(
                 tree?.specialties ?? [], tree?.categories ?? [],
-                r.specialty_id, r.category_id ?? null,
+                r.specialtyId ?? undefined, r.categoryId ?? null,
               )}
             </div>
             {extra > 0 && (
@@ -142,7 +125,7 @@ export default function Products() {
         );
       },
     },
-    { key: 'unit', header: 'الوحدة', render: (r) => r.unit?.name_ar ?? '—' },
+    { key: 'unit', header: 'الوحدة', render: (r) => r.unitName || '—' },
     {
       key: 'offers',
       header: 'عروض البائعين',
@@ -151,7 +134,7 @@ export default function Products() {
           className="text-sm text-accent hover:underline"
           onClick={(e) => { e.stopPropagation(); setOffersFor(r); }}
         >
-          {r.seller_products?.[0]?.count ?? 0} عرض
+          {r.offers} عرض
         </button>
       ),
     },
@@ -160,7 +143,7 @@ export default function Products() {
       header: 'نشط',
       render: (r) => (
         <span onClick={(e) => e.stopPropagation()}>
-          <Toggle checked={r.is_active} onChange={() => toggleActive.mutate(r)} />
+          <Toggle checked={r.isActive} onChange={() => toggleActive.mutate(r)} />
         </span>
       ),
     },
@@ -174,11 +157,22 @@ export default function Products() {
         subtitle="الكتالوج المشترك — كل منتج SKU واحد يعرض عليه البائعون أسعارهم"
         actions={
           <>
-            <Input placeholder="بحث بالاسم/SKU…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="w-56" />
+            <Input placeholder="بحث بالاسم/SKU…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
             <Select value={specialty} onChange={(e) => { setSpecialty(e.target.value); setPage(0); }} className="w-44">
               <option value="all">كل التخصصات</option>
               {(tree?.specialties ?? []).map((s) => (
                 <option key={s.id} value={s.id}>{s.name_ar}</option>
+              ))}
+            </Select>
+            {/* «مين مالوش عروض» هو أهم سؤال في الكتالوج — المادة من غير عرض
+                بتبان للمشتري من غير سعر. */}
+            <Select
+              value={offers}
+              onChange={(e) => { setOffers(e.target.value as OffersFilter); setPage(0); }}
+              className="w-40"
+            >
+              {OFFERS_FILTERS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </Select>
             <Btn variant="ghost" onClick={() => setImporting(true)}>رفع Excel</Btn>
@@ -189,11 +183,11 @@ export default function Products() {
       <DataTable
         columns={columns}
         rows={rows}
-        loading={isLoading}
-        error={error ? (error as Error).message : null}
-        onRetry={() => refetch()}
+        loading={list.isLoading}
+        error={list.error ? (list.error as Error).message : null}
+        onRetry={() => list.refetch()}
         page={page}
-        hasMore={(data?.length ?? 0) > PAGE_SIZE}
+        hasMore={(page + 1) * PAGE_SIZE < (list.data?.total ?? 0)}
         onPage={setPage}
         emptyTitle="لا توجد منتجات"
       />
@@ -222,15 +216,14 @@ export default function Products() {
   );
 }
 
-function ProductModal({ product, onClose, onDone }: { product: Row | null; onClose: () => void; onDone: () => void }) {
+function ProductModal({ product, onClose, onDone }: { product: ProductRow | null; onClose: () => void; onDone: () => void }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [form, setForm] = useState({
-    source_code: product?.source_code ?? '',
-    name_ar: product?.name_ar ?? '',
-    brand: product?.brand ?? '',
+    source_code: product?.sourceCode ?? '',
+    name_ar: product?.nameAr ?? '',
     image_url: product?.images?.[0] ?? '',
     unit_id: '',
   });
@@ -319,7 +312,6 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
         sku: product?.sku ?? skuFromSourceCode(form.source_code),
         source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
-        brand: form.brand.trim() || null,
         specialty_id: primary.specialtyId,
         category_id: primary.categoryId,
         unit_id: form.unit_id,
@@ -341,7 +333,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
   });
 
   return (
-    <Modal title={product ? `تعديل — ${product.name_ar}` : 'إضافة منتج'} open onClose={onClose} wide>
+    <Modal title={product ? `تعديل — ${product.nameAr}` : 'إضافة منتج'} open onClose={onClose} wide>
       <div className="space-y-4">
         <Field label="صورة المنتج">
           <div className="flex items-start gap-3">
@@ -396,21 +388,17 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
           categories={tree?.categories ?? []}
         />
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="الوحدة" hint="تظهر للمشتري جنب الكمية المطلوبة في التطبيق">
-            <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
-              <option value="">اختر…</option>
-              {(units ?? []).map((u) => (
-                <option key={u.id} value={u.id}>{u.name_ar}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="الماركة">
-            <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-          </Field>
-        </div>
-        {/* بلد المنشأ اتشال من المادة: هو خاصية عرض البائع (نفس المادة بمناشئ
-            مختلفة عند بائعين مختلفين)، وبيتحط على عرض البائع في seller_products. */}
+        <Field label="الوحدة" hint="تظهر للمشتري جنب الكمية المطلوبة في التطبيق">
+          <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
+            <option value="">اختر…</option>
+            {(units ?? []).map((u) => (
+              <option key={u.id} value={u.id}>{u.name_ar}</option>
+            ))}
+          </Select>
+        </Field>
+        {/* لا ماركة ولا بلد منشأ على المادة: الاتنين خاصية عرض البائع — نفس
+            المادة بتتباع بمناشئ مختلفة عند بائعين مختلفين، والمنشأ بيتحط على
+            العرض في `seller_products` ويتعدّل من «مواد الشركة». */}
 
         <div className="flex justify-end gap-2">
           <Btn variant="ghost" onClick={onClose} disabled={save.isPending}>إلغاء</Btn>
@@ -421,7 +409,7 @@ function ProductModal({ product, onClose, onDone }: { product: Row | null; onClo
   );
 }
 
-function OffersModal({ product, onClose }: { product: Row; onClose: () => void }) {
+function OffersModal({ product, onClose }: { product: ProductRow; onClose: () => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ['product-offers', product.id],
     queryFn: async () => {
@@ -442,7 +430,7 @@ function OffersModal({ product, onClose }: { product: Row; onClose: () => void }
   });
 
   return (
-    <Modal title={`عروض البائعين — ${product.name_ar}`} open onClose={onClose}>
+    <Modal title={`عروض البائعين — ${product.nameAr}`} open onClose={onClose}>
       {isLoading ? (
         <div className="py-6 text-center text-sm text-subtext">جارٍ التحميل…</div>
       ) : (data ?? []).length === 0 ? (

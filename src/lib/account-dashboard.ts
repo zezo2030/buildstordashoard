@@ -19,6 +19,40 @@ export type AmountRow = {
 
 export type NamedTotal = { id: string; name: string; total: number };
 
+/**
+ * صف مقياسه عدد مش مبلغ — «عدد المواد في كل تخصص»، «عدد الطلبات لكل موقع».
+ * المبلغ بيفضل معروض جنبه لأنه سياق مفيد، لكن الترتيب على العدد.
+ */
+export type CountRow = {
+  id: string;
+  name: string;
+  note: string;
+  count: number;
+  qty: number;
+  total: number;
+};
+
+/** طرف (مورّد/عميل/موقع) وتحته المنتجات اللي اتباعت له. */
+export type GroupRows = {
+  id: string;
+  name: string;
+  note: string;
+  imageUrl: string | null;
+  total: number;
+  rows: AmountRow[];
+};
+
+export type ReturnBrief = {
+  id: string;
+  number: string;
+  orderNumber: string;
+  party: string;
+  status: string;
+  count: number;
+  total: number;
+  at: string;
+};
+
 export type SellerDashboard = {
   totalSales: number;
   ordersCount: number;
@@ -26,9 +60,15 @@ export type SellerDashboard = {
   customersCount: number;
   listedItems: number;
   specialties: NamedTotal[];
+  specialtyItems: CountRow[];
   customers: { key: string; label: string; total: number }[];
+  customerOrders: CountRow[];
   products: AmountRow[];
   sites: AmountRow[];
+  siteOrders: CountRow[];
+  productsByCustomer: GroupRows[];
+  productsBySite: GroupRows[];
+  returns: ReturnBrief[];
 };
 
 export type BuyerDashboard = {
@@ -38,9 +78,14 @@ export type BuyerDashboard = {
   suppliersCount: number;
   sitesCount: number;
   specialties: NamedTotal[];
+  specialtyItems: CountRow[];
   products: AmountRow[];
   suppliers: AmountRow[];
   sites: AmountRow[];
+  siteOrders: CountRow[];
+  productsBySupplier: GroupRows[];
+  productsBySite: GroupRows[];
+  returns: ReturnBrief[];
 };
 
 const num = (v: unknown) => {
@@ -101,6 +146,41 @@ function namedTotal(r: Record<string, unknown>): NamedTotal {
   return { id: String(r.id ?? ''), name: String(r.name ?? ''), total: num(r.total) };
 }
 
+function countRow(r: Record<string, unknown>): CountRow {
+  return {
+    id: String(r.id ?? ''),
+    name: String(r.name ?? ''),
+    note: String(r.note ?? ''),
+    count: num(r.count),
+    qty: num(r.qty),
+    total: num(r.total),
+  };
+}
+
+function groupRows(r: Record<string, unknown>): GroupRows {
+  return {
+    id: String(r.id ?? ''),
+    name: String(r.name ?? ''),
+    note: String(r.note ?? ''),
+    imageUrl: typeof r.image_url === 'string' && r.image_url ? r.image_url : null,
+    total: num(r.total),
+    rows: rows(r.rows).map(amountRow),
+  };
+}
+
+function returnBrief(r: Record<string, unknown>): ReturnBrief {
+  return {
+    id: String(r.id ?? ''),
+    number: String(r.number ?? ''),
+    orderNumber: String(r.order_number ?? ''),
+    party: String(r.party ?? ''),
+    status: String(r.status ?? ''),
+    count: num(r.count),
+    total: num(r.total),
+    at: String(r.at ?? ''),
+  };
+}
+
 export function parseSellerDashboard(raw: unknown): SellerDashboard {
   const r = rec(raw);
   return {
@@ -110,13 +190,19 @@ export function parseSellerDashboard(raw: unknown): SellerDashboard {
     customersCount: num(r.customers_count),
     listedItems: num(r.listed_items),
     specialties: rows(r.specialties).map(namedTotal),
+    specialtyItems: rows(r.specialty_items).map(countRow),
     customers: rows(r.customers).map((c) => ({
       key: String(c.key ?? ''),
       label: String(c.label ?? ''),
       total: num(c.total),
     })),
+    customerOrders: rows(r.customer_orders).map(countRow),
     products: rows(r.products).map(amountRow),
     sites: rows(r.sites).map(amountRow),
+    siteOrders: rows(r.site_orders).map(countRow),
+    productsByCustomer: rows(r.products_by_customer).map(groupRows),
+    productsBySite: rows(r.products_by_site).map(groupRows),
+    returns: rows(r.returns).map(returnBrief),
   };
 }
 
@@ -129,8 +215,13 @@ export function parseBuyerDashboard(raw: unknown): BuyerDashboard {
     suppliersCount: num(r.suppliers_count),
     sitesCount: num(r.sites_count),
     specialties: rows(r.specialties).map(namedTotal),
+    specialtyItems: rows(r.specialty_items).map(countRow),
     products: rows(r.products).map(amountRow),
     suppliers: rows(r.suppliers).map(amountRow),
     sites: rows(r.sites).map(amountRow),
+    siteOrders: rows(r.site_orders).map(countRow),
+    productsBySupplier: rows(r.products_by_supplier).map(groupRows),
+    productsBySite: rows(r.products_by_site).map(groupRows),
+    returns: rows(r.returns).map(returnBrief),
   };
 }

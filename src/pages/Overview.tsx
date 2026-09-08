@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { PackagePlus, Headset, FileSpreadsheet, Users, Building2, Store, Package, ShoppingCart, Wallet, ArrowUpLeft } from 'lucide-react';
+import { PackagePlus, Headset, Users, Building2, Store, Package, ShoppingCart, Wallet, ArrowUpLeft } from 'lucide-react';
 import { fetchOverviewCounts, fetchSalesRange } from '../api/stats';
 import { supabase, arError } from '../lib/supabase';
 import { KpiCard, PageHeader, Spinner, ErrorState, Money } from '../components/ui';
 import { DateRangePicker, todayISO, type DateRange } from '../components/DateRangePicker';
 import SalesChartCard from '../components/overview/SalesChartCard';
 import SpecialtySalesCard from '../components/overview/SpecialtySalesCard';
+import { ExpiringPlansCard } from '../components/ExpiringPlansCard';
 import { money } from '../lib/format';
 
 export default function Overview() {
@@ -51,14 +52,15 @@ export default function Overview() {
   const d = counts.data;
 
   const alerts = [
-    { to: '/requests/materials?tab=sellers', label: 'اقتراح منتج من بائع', count: openSubmissions.data ?? 0, icon: <PackagePlus size={18} /> },
-    { to: '/requests/materials', label: 'طلب مادة من مشترٍ', count: d.openProductRequests, icon: <FileSpreadsheet size={18} /> },
+    { to: '/requests/materials', label: 'اقتراح منتج من بائع', count: openSubmissions.data ?? 0, icon: <PackagePlus size={18} /> },
     { to: '/support', label: 'تذكرة دعم مفتوحة', count: d.openTickets, icon: <Headset size={18} /> },
   ].filter((a) => a.count > 0);
 
   return (
     <div>
       <PageHeader title="نظرة عامة" subtitle="مؤشرات حيّة من قاعدة البيانات" />
+
+      <ExpiringPlansCard />
 
       {alerts.length > 0 && (
         <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

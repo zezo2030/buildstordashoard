@@ -50,6 +50,7 @@ export async function fetchFinanceSummary(
 export type FinanceReturnRow = {
   id: string;
   returnNumber: string;
+  orderId: string | null;
   orderNumber: string | null;
   buyerName: string | null;
   sellerName: string | null;
@@ -86,6 +87,7 @@ export async function fetchFinanceReturns(q: {
     rows: rows.map((x) => ({
       id: String(x.id),
       returnNumber: String(x.return_number ?? ''),
+      orderId: (x.order_id as string | null) ?? null,
       orderNumber: (x.order_number as string | null) ?? null,
       buyerName: (x.buyer_name as string | null) ?? null,
       sellerName: (x.seller_name as string | null) ?? null,

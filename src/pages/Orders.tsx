@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { fetchOrders, type OrderRow, type OrderSortKey } from '../api/orders';
+import { fetchOrders, type OrderRow, type OrderSortKey, type OrdersScope } from '../api/orders';
 import { PageHeader, StatusChip, Select, Input, Money, Card } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
@@ -22,6 +22,14 @@ const METHOD_OPTIONS: [string, string][] = [
   ['credit_card', 'بطاقة ائتمان'],
 ];
 
+// الطلب اللي اتلغى أو اتدفع خلاص بقى مستنده فاتورة — مكانه قسم الفواتير مش
+// هنا. بنسيب طريق للمؤرشف من نفس الشاشة عشان المراجعة، بس الافتراضي الجاري.
+const SCOPE_OPTIONS: { value: OrdersScope; label: string }[] = [
+  { value: 'current', label: 'عمليات جارية' },
+  { value: 'archived', label: 'مؤرشفة (مدفوعة/ملغاة)' },
+  { value: 'all', label: 'الكل' },
+];
+
 export default function Orders() {
   const navigate = useNavigate();
   const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
@@ -29,6 +37,7 @@ export default function Orders() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('all');
   const [method, setMethod] = useState('all');
+  const [scope, setScope] = useState<OrdersScope>('current');
   const [sort, setSort] = useState<OrderSortKey>('placed_at');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
@@ -41,9 +50,9 @@ export default function Orders() {
   }, [search, debouncedSearch]);
 
   const list = useQuery({
-    queryKey: ['orders', range.from, range.to, debouncedSearch, status, method, sort, dir, page],
+    queryKey: ['orders', range.from, range.to, debouncedSearch, status, method, scope, sort, dir, page],
     queryFn: () => fetchOrders({
-      from: range.from, to: range.to, search: debouncedSearch, status, method,
+      from: range.from, to: range.to, search: debouncedSearch, status, method, scope,
       sort, dir, page, pageSize: PAGE_SIZE,
     }),
     placeholderData: keepPreviousData,
@@ -74,7 +83,14 @@ export default function Orders() {
 
   return (
     <div>
-      <PageHeader title="الطلبات" subtitle="كل طلبات المنصة — بحث برقم الطلب أو اسم المشتري أو البائع" />
+      <PageHeader
+        title="الطلبات"
+        subtitle={
+          scope === 'current'
+            ? 'العمليات الجارية فقط — الطلب المدفوع أو الملغي مستنده في قسم الفواتير'
+            : 'بحث برقم الطلب أو اسم المشتري أو البائع'
+        }
+      />
 
       <Card className="mb-4 flex flex-wrap items-center gap-2 p-3">
         <Input
@@ -83,6 +99,13 @@ export default function Orders() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
         />
+        <Select
+          value={scope}
+          onChange={(e) => { setScope(e.target.value as OrdersScope); setPage(0); }}
+          className="w-48"
+        >
+          {SCOPE_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </Select>
         <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-40">
           <option value="all">كل الحالات</option>
           {STATUS_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}

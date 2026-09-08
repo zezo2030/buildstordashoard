@@ -19,12 +19,22 @@ export type OrderRow = {
   placedAt: string;
 };
 
+/**
+ * نطاق القايمة.
+ *
+ * «الطلبات» بقت العمليات الجارية بس: الطلب اللي اتلغى أو اتدفع بقى مستنده
+ * فاتورة، ومكانه قسم الفواتير. المؤرشف لسه موصول من نفس الشاشة عشان الأدمن
+ * يقدر يراجعه، بس مش هو الافتراضي.
+ */
+export type OrdersScope = 'current' | 'archived' | 'all';
+
 export type OrdersQuery = {
   from: string | null;
   to: string | null;
   search: string;
   status: string;
   method: string;
+  scope: OrdersScope;
   sort: OrderSortKey;
   dir: 'asc' | 'desc';
   page: number;
@@ -44,6 +54,7 @@ export async function fetchOrders(q: OrdersQuery): Promise<{ rows: OrderRow[]; t
     p_dir: q.dir,
     p_limit: q.pageSize,
     p_offset: q.page * q.pageSize,
+    p_scope: q.scope,
   } as never);
   if (error) throw new Error(arError(error));
   const r = data as unknown as { rows?: Record<string, unknown>[]; total?: unknown };

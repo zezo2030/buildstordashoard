@@ -8,10 +8,11 @@ import { uploadCompanyLogo } from '../lib/company-logo';
 import { PageHeader, Card, StatusChip, Money, Btn, Field, Input, Spinner, ErrorState } from '../components/ui';
 import { SellerStatsPanel, BuyerCompanyStatsPanel } from '../components/AccountStatsPanel';
 import { SellerProfileCard } from '../components/SellerProfileCard';
+import { AccountOrdersCard } from '../components/AccountOrdersCard';
 import { BillingPlanDialog, periodText, type CurrentPlan } from './accounts/BillingCell';
 import { useToast } from '../components/Toast';
-import { fmtDate, fmtDateTime, localPhone, money } from '../lib/format';
-import { orderStatusLabels, accountStatusLabels, labelOf } from '../lib/labels';
+import { fmtDate, localPhone, money } from '../lib/format';
+import { accountStatusLabels, labelOf } from '../lib/labels';
 
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +32,8 @@ export default function CompanyDetail() {
           .select('id, order_number, status, grand_total, placed_at')
           .or(`seller_company_id.eq.${id},buyer_company_id.eq.${id}`)
           .order('placed_at', { ascending: false })
-          .limit(10),
+          // كاملة (لحد 200) عشان «عرض الكل» يفتح من نفس البيانات المحمّلة
+          .limit(200),
         supabase
           .from('seller_products')
           .select('id', { count: 'exact', head: true })
@@ -189,26 +191,7 @@ export default function CompanyDetail() {
           )}
         </Card>
 
-        <Card className="p-4">
-          <h2 className="mb-3 font-bold">آخر الطلبات</h2>
-          {data.orders.length === 0 ? (
-            <p className="text-sm text-subtext">لا توجد طلبات</p>
-          ) : (
-            <div className="divide-y divide-line">
-              {data.orders.map((o) => {
-                const s = labelOf(orderStatusLabels, o.status);
-                return (
-                  <Link key={o.id} to={`/orders/${o.id}`} className="flex items-center gap-3 py-2.5 text-sm hover:bg-surface">
-                    <span className="font-medium" dir="ltr">{o.order_number}</span>
-                    <span className="flex-1 text-xs text-subtext">{fmtDateTime(o.placed_at)}</span>
-                    <StatusChip label={s.label} tone={s.tone} />
-                    <Money value={o.grand_total} />
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+        <AccountOrdersCard orders={data.orders} emptyText="لا توجد طلبات" />
       </div>
     </div>
   );
@@ -348,6 +331,17 @@ function BrandingCard({
   );
 }
 
+/** نفس عتبة تنبيه «نظرة عامة» — الخطة اللي فاضلها ≤ 30 يوم بتتلوّن. */
+const EXPIRY_WARNING_DAYS = 30;
+
+/** فرق الأيام بين النهارده وتاريخ (سالب = عدّى). */
+function daysUntil(iso: string): number {
+  const end = new Date(`${iso}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((end.getTime() - today.getTime()) / 86_400_000);
+}
+
 /**
  * خطة رسوم البائع في صفحته: النظام (نسبة/اشتراك)، القيمة، ومدة السريان.
  * بتقرا من `billing_plans` مباشرة — الصفحة دي مش بتمر على قايمة الحسابات.
@@ -385,12 +379,27 @@ function SellerBillingRow({ companyId, name }: { companyId: string; name: string
       ? `نسبة ${current.rate ?? 0}%`
       : '—';
 
+  // تنبيه انتهاء الخطة في مكانه الطبيعي: جنب الرسوم نفسها، عشان الأدمن اللي
+  // فتح صفحة البائع يلاقي التجديد قدامه من غير ما يرجع للنظرة العامة.
+  const daysLeft = current.to ? daysUntil(current.to) : null;
+  const nearEnd = daysLeft != null && daysLeft <= EXPIRY_WARNING_DAYS;
+
   return (
     <div className="mt-4 border-t border-line pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <div>
           <div className="text-subtext">رسوم المنصة على البائع</div>
-          <div className="mt-0.5 text-xs text-subtext">{periodText(current.from, current.to)}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-subtext">
+            <span>{periodText(current.from, current.to)}</span>
+            {nearEnd && (
+              <StatusChip
+                label={daysLeft < 0
+                  ? `منتهٍ منذ ${Math.abs(daysLeft)} يوم`
+                  : daysLeft === 0 ? 'ينتهي اليوم' : `باقي ${daysLeft} يوم`}
+                tone={daysLeft <= 0 ? 'red' : 'orange'}
+              />
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="font-bold" dir="ltr">{q.isLoading ? '…' : summary}</span>

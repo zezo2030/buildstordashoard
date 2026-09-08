@@ -141,6 +141,7 @@ function TaxonomyBrowser() {
   const { toast } = useToast();
   const [path, setPath] = useState<Crumb[]>([{ kind: 'root' }]);
   const [editingSpecialty, setEditingSpecialty] = useState<SpecialtyForm | null>(null);
+  const [deletingSpecialty, setDeletingSpecialty] = useState<Specialty | null>(null);
   const [editingCategory, setEditingCategory] = useState<CategoryForm | null>(null);
   const [addingProduct, setAddingProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
@@ -226,6 +227,22 @@ function TaxonomyBrowser() {
       if (error) throw new Error(arError(error));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['specialties'] }),
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // الحذف بيعدّي على `admin_delete_specialty`: الدالة هي اللي بتقرر ينفع ولا
+  // لأ وبترجّع السبب بالعربي (فيه فروع / فيه منتجات / مستخدم في طلبات).
+  const deleteSpecialty = useMutation({
+    mutationFn: async (s: Specialty) => {
+      const { error } = await supabase.rpc('admin_delete_specialty' as never, { p_id: s.id } as never);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم حذف التخصص');
+      setDeletingSpecialty(null);
+      qc.invalidateQueries({ queryKey: ['specialties'] });
+      qc.invalidateQueries({ queryKey: ['catalog-tree'] });
+    },
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -410,6 +427,7 @@ function TaxonomyBrowser() {
                     image_url: s.image_url ?? '',
                   })
                 }
+                onDelete={() => setDeletingSpecialty(s)}
               />
             ))}
           </div>
@@ -422,6 +440,20 @@ function TaxonomyBrowser() {
             onSave={() => saveSpecialty.mutate()}
           />
         )}
+        <ConfirmDialog
+          open={!!deletingSpecialty}
+          title="حذف التخصص"
+          message={
+            deletingSpecialty
+              ? `سيتم حذف «${deletingSpecialty.name_ar}» نهائيًا. الحذف ممنوع لو التخصص فيه فروع أو منتجات أو استُخدم في طلبات سابقة.`
+              : ''
+          }
+          confirmLabel="حذف"
+          danger
+          busy={deleteSpecialty.isPending}
+          onConfirm={() => deletingSpecialty && deleteSpecialty.mutate(deletingSpecialty)}
+          onClose={() => setDeletingSpecialty(null)}
+        />
       </Card>
     );
   }
@@ -779,6 +811,7 @@ function TaxonomyListRow({
   onOpen,
   onToggle,
   onEdit,
+  onDelete,
 }: {
   url: string | null;
   name: string;
@@ -787,6 +820,7 @@ function TaxonomyListRow({
   onOpen: () => void;
   onToggle: () => void;
   onEdit: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <div className="flex items-center gap-2 px-3 py-2 hover:bg-surface/80">
@@ -815,6 +849,16 @@ function TaxonomyListRow({
       >
         <Pencil size={15} />
       </button>
+      {onDelete && (
+        <button
+          type="button"
+          className="rounded-lg p-2 text-subtext hover:bg-white hover:text-danger"
+          onClick={onDelete}
+          title="حذف"
+        >
+          <Trash2 size={15} />
+        </button>
+      )}
     </div>
   );
 }
@@ -1346,6 +1390,7 @@ function Units() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState<{ id?: string; code: string; name_ar: string; decimals: number } | null>(null);
+  const [deleting, setDeleting] = useState<{ id: string; name_ar: string } | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['units'],
@@ -1371,6 +1416,21 @@ function Units() {
       toast('success', 'تم الحفظ');
       setEditing(null);
       qc.invalidateQueries({ queryKey: ['units'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // نفس منطق حذف التخصص: الداتابيز هي اللي بتقول الوحدة مستخدمة فين
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('admin_delete_unit' as never, { p_id: id } as never);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم حذف الوحدة');
+      setDeleting(null);
+      qc.invalidateQueries({ queryKey: ['units'] });
+      qc.invalidateQueries({ queryKey: ['units-list'] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -1401,6 +1461,14 @@ function Units() {
               >
                 تعديل
               </Btn>
+              <button
+                type="button"
+                className="rounded-lg p-2 text-subtext hover:bg-surface hover:text-danger"
+                onClick={() => setDeleting({ id: u.id, name_ar: u.name_ar })}
+                title="حذف"
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
           ))}
         </div>
@@ -1437,6 +1505,20 @@ function Units() {
           </div>
         </Modal>
       )}
+      <ConfirmDialog
+        open={!!deleting}
+        title="حذف وحدة القياس"
+        message={
+          deleting
+            ? `سيتم حذف «${deleting.name_ar}» نهائيًا. الحذف ممنوع لو الوحدة مستخدمة في أي منتج أو عرض بائع.`
+            : ''
+        }
+        confirmLabel="حذف"
+        danger
+        busy={remove.isPending}
+        onConfirm={() => deleting && remove.mutate(deleting.id)}
+        onClose={() => setDeleting(null)}
+      />
     </Card>
   );
 }

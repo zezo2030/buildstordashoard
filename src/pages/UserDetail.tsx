@@ -11,10 +11,11 @@ import {
   PageHeader, Card, StatusChip, Money, Btn, Field, Input, Textarea, Spinner, ErrorState,
 } from '../components/ui';
 import { BuyerStatsPanel } from '../components/AccountStatsPanel';
+import { AccountOrdersCard } from '../components/AccountOrdersCard';
 import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { fmtDate, fmtDateTime, localPhone } from '../lib/format';
-import { roleLabels, accountStatusLabels, orderStatusLabels, labelOf } from '../lib/labels';
+import { roleLabels, accountStatusLabels, labelOf } from '../lib/labels';
 
 const memberRoleLabel: Record<string, string> = {
   owner: 'مالك',
@@ -62,12 +63,14 @@ export default function UserDetail() {
           .select('id, label, recipient, phone, governorate, area, block, street, building, floor, apartment, is_default')
           .eq('user_id', id!)
           .order('is_default', { ascending: false }),
+        // القايمة كاملة (لحد 200) عشان «عرض الكل» يفتح من نفس البيانات من غير
+        // طلب تاني — الكارت بيعرض آخر 10 والباقي في المودال.
         supabase
           .from('orders')
           .select('id, order_number, status, grand_total, placed_at')
           .eq('buyer_id', id!)
           .order('placed_at', { ascending: false })
-          .limit(15),
+          .limit(200),
         supabase
           .from('support_tickets')
           .select('id, ticket_number, subject, status, created_at')
@@ -285,26 +288,7 @@ export default function UserDetail() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Card className="p-4">
-          <h2 className="mb-3 font-bold">آخر الطلبات</h2>
-          {data.orders.length === 0 ? (
-            <p className="text-sm text-subtext">لا توجد طلبات كمشتري</p>
-          ) : (
-            <div className="divide-y divide-line">
-              {data.orders.map((o) => {
-                const s = labelOf(orderStatusLabels, o.status);
-                return (
-                  <Link key={o.id} to={`/orders/${o.id}`} className="flex items-center gap-3 py-2.5 text-sm hover:bg-surface">
-                    <span className="font-medium" dir="ltr">{o.order_number}</span>
-                    <span className="flex-1 text-xs text-subtext">{fmtDateTime(o.placed_at)}</span>
-                    <StatusChip label={s.label} tone={s.tone} />
-                    <Money value={o.grand_total} />
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </Card>
+        <AccountOrdersCard orders={data.orders} emptyText="لا توجد طلبات كمشتري" />
 
         <Card className="p-4">
           <h2 className="mb-3 font-bold">تذاكر الدعم</h2>
