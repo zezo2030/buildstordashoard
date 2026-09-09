@@ -224,6 +224,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
   const [form, setForm] = useState({
     source_code: product?.sourceCode ?? '',
     name_ar: product?.nameAr ?? '',
+    origin_country: '',
     image_url: product?.images?.[0] ?? '',
     unit_id: '',
   });
@@ -249,7 +250,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('specialty_id, category_id, unit_id, images, product_placements (specialty_id, category_id)')
+        .select('specialty_id, category_id, unit_id, origin_country, images, product_placements (specialty_id, category_id)')
         .eq('id', product!.id)
         .single();
       if (error) throw new Error(arError(error));
@@ -266,6 +267,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
         setForm((f) => ({
           ...f,
           unit_id: data.unit_id ?? '',
+          origin_country: data.origin_country ?? '',
           image_url: data.images?.[0] ?? f.image_url,
         }));
       }
@@ -312,6 +314,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
         sku: product?.sku ?? skuFromSourceCode(form.source_code),
         source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
+        origin_country: form.origin_country.trim() || null,
         specialty_id: primary.specialtyId,
         category_id: primary.categoryId,
         unit_id: form.unit_id,
@@ -377,9 +380,18 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
             <Input dir="ltr" value={displaySku} readOnly className="bg-surface" />
           </Field>
         </div>
-        <Field label="الاسم (عربي)">
-          <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="الاسم (عربي)">
+            <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
+          </Field>
+          <Field label="بلد المنشأ" hint="منشأ المادة في الكتالوج — البائع يقدر يحدد منشأ تاني لعرضه">
+            <Input
+              value={form.origin_country}
+              onChange={(e) => setForm({ ...form, origin_country: e.target.value })}
+              placeholder="مثال: كويتي / صيني"
+            />
+          </Field>
+        </div>
 
         <PlacementsField
           value={placements}
@@ -396,10 +408,6 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
             ))}
           </Select>
         </Field>
-        {/* لا ماركة ولا بلد منشأ على المادة: الاتنين خاصية عرض البائع — نفس
-            المادة بتتباع بمناشئ مختلفة عند بائعين مختلفين، والمنشأ بيتحط على
-            العرض في `seller_products` ويتعدّل من «مواد الشركة». */}
-
         <div className="flex justify-end gap-2">
           <Btn variant="ghost" onClick={onClose} disabled={save.isPending}>إلغاء</Btn>
           <Btn variant="accent" busy={save.isPending} onClick={() => save.mutate()}>حفظ</Btn>

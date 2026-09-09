@@ -39,6 +39,7 @@ type ProductRow = {
   sku: string;
   source_code: string | null;
   name_ar: string;
+  origin_country: string | null;
   brand: string | null;
   images: string[];
   is_active: boolean;
@@ -143,6 +144,7 @@ function TaxonomyBrowser() {
   const [editingSpecialty, setEditingSpecialty] = useState<SpecialtyForm | null>(null);
   const [deletingSpecialty, setDeletingSpecialty] = useState<Specialty | null>(null);
   const [editingCategory, setEditingCategory] = useState<CategoryForm | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
   const [addingProduct, setAddingProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [converting, setConverting] = useState(false);
@@ -194,7 +196,7 @@ function TaxonomyBrowser() {
       let q = supabase
         .from('products')
         .select(
-          'id, sku, source_code, name_ar, brand, images, is_active, unit_id, unit:units (name_ar),' +
+          'id, sku, source_code, name_ar, origin_country, brand, images, is_active, unit_id, unit:units (name_ar),' +
           ' product_placements!inner (specialty_id, category_id)',
         )
         .eq('product_placements.specialty_id', specialtyId!)
@@ -252,6 +254,22 @@ function TaxonomyBrowser() {
       if (error) throw new Error(arError(error));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['taxonomy-children'] }),
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // الحذف في أي مستوى مش في الرئيسي بس: نفس قاعدة التخصص — الداتابيز هي
+  // اللي بتقرر ينفع ولا لأ وبترجّع السبب بالعربي.
+  const deleteCategory = useMutation({
+    mutationFn: async (c: Category) => {
+      const { error } = await supabase.rpc('admin_delete_category' as never, { p_id: c.id } as never);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم حذف التخصص الفرعي');
+      setDeletingCategory(null);
+      qc.invalidateQueries({ queryKey: ['taxonomy-children'] });
+      qc.invalidateQueries({ queryKey: ['catalog-tree'] });
+    },
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -585,6 +603,7 @@ function TaxonomyBrowser() {
                             image_url: c.image_url ?? '',
                           })
                         }
+                        onDelete={() => setDeletingCategory(c)}
                       />
                     ))}
                   </div>
@@ -787,6 +806,21 @@ function TaxonomyBrowser() {
         busy={removeProduct.isPending}
         onConfirm={() => deletingProduct && removeProduct.mutate(deletingProduct)}
         onClose={() => setDeletingProduct(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deletingCategory}
+        title="حذف التخصص الفرعي"
+        message={
+          deletingCategory
+            ? `سيتم حذف «${deletingCategory.name_ar}» نهائيًا. الحذف ممنوع لو تحته فروع أو منتجات أو استُخدم في طلبات سابقة.`
+            : null
+        }
+        confirmLabel="حذف"
+        danger
+        busy={deleteCategory.isPending}
+        onConfirm={() => deletingCategory && deleteCategory.mutate(deletingCategory)}
+        onClose={() => setDeletingCategory(null)}
       />
 
       <ConfirmDialog
@@ -1226,6 +1260,7 @@ function TaxonomyProductModal({
   const [form, setForm] = useState({
     source_code: product?.source_code ?? '',
     name_ar: product?.name_ar ?? '',
+    origin_country: product?.origin_country ?? '',
     unit_id: product?.unit_id ?? '',
     image_url: product?.images?.[0] ?? '',
     is_active: product?.is_active ?? true,
@@ -1279,6 +1314,7 @@ function TaxonomyProductModal({
         sku: product?.sku ?? skuFromSourceCode(form.source_code),
         source_code: form.source_code.trim() || null,
         name_ar: form.name_ar.trim(),
+        origin_country: form.origin_country.trim() || null,
         specialty_id: specialtyId,
         category_id: categoryId,
         unit_id: form.unit_id,
@@ -1348,6 +1384,13 @@ function TaxonomyProductModal({
           <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
+          <Field label="بلد المنشأ" hint="منشأ المادة في الكتالوج — البائع يقدر يحدد منشأ تاني لعرضه">
+            <Input
+              value={form.origin_country}
+              onChange={(e) => setForm({ ...form, origin_country: e.target.value })}
+              placeholder="مثال: كويتي / صيني"
+            />
+          </Field>
           <Field label="وحدة القياس">
             <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
               <option value="">اختر…</option>

@@ -20,7 +20,7 @@ const n = (v: number) => <span dir="ltr" className="tabular-nums">{v}</span>;
  * الحساب الموقوف لازم يبان معاه سبب الوقف وتاريخه في الخلية نفسها — الشرح كان
  * في `title` بس، يعني مايبانش غير بالوقوف بالماوس فوق الشارة.
  */
-function statusCell(r: AccountRow) {
+export function statusCell(r: AccountRow) {
   if (r.status === 'active') return <StatusChip label="نشط" tone="green" />;
   return (
     <div className="flex flex-col items-start gap-0.5">

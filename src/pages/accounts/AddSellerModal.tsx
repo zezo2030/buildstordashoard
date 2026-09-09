@@ -33,7 +33,6 @@ export function AddSellerModal({ onClose }: { onClose: () => void }) {
   const [fee, setFee] = useState('0');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [cycles, setCycles] = useState('');
 
   const m = useMutation({
     mutationFn: async () => {
@@ -63,7 +62,6 @@ export function AddSellerModal({ onClose }: { onClose: () => void }) {
         fee: billingKind === 'subscription' ? Number(fee || 0) : null,
         startsOn: from || null,
         endsOn: to || null,
-        cycles: cycles.trim() === '' ? null : Number(cycles),
       });
       return companyId;
     },
@@ -137,7 +135,7 @@ export function AddSellerModal({ onClose }: { onClose: () => void }) {
               </Field>
             )}
           </div>
-          <div className="mt-3 grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-2 gap-3">
             <Field label="من تاريخ">
               <Input dir="ltr" type="date" value={from} max={to || undefined}
                 onChange={(e) => setFrom(e.target.value)} />
@@ -145,10 +143,6 @@ export function AddSellerModal({ onClose }: { onClose: () => void }) {
             <Field label="إلى تاريخ">
               <Input dir="ltr" type="date" value={to} min={from || undefined}
                 onChange={(e) => setTo(e.target.value)} />
-            </Field>
-            <Field label="عدد الدورات" hint="بالشهور">
-              <Input dir="ltr" type="number" min={1} step="1" value={cycles}
-                onChange={(e) => setCycles(e.target.value)} />
             </Field>
           </div>
         </div>

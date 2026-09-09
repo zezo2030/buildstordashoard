@@ -17,6 +17,11 @@ import { ReturnDetailsModal } from '../components/ReturnDetailsModal';
 import { fmtDateTime } from '../lib/format';
 import { returnStatusLabels, labelOf } from '../lib/labels';
 
+// الفلتر على الحالات اللي الأدمن بيتابعها فعلاً: اتقدّم، اتقبل، اترفض من مين.
+// باقي الحالات (استلام، رد مبلغ، مقبول جزئيًا…) لسه بتبان في عمود الحالة وتحت
+// «كل الحالات» — بس مالهاش خانة فلتر عشان القايمة ماتطولش من غير فايدة.
+const STATUS_FILTER = ['submitted', 'approved', 'rejected', 'cancelled'] as const;
+
 export default function Returns() {
   const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
   const [search, setSearch] = useState('');
@@ -107,7 +112,9 @@ export default function Returns() {
         />
         <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
           <option value="all">كل الحالات</option>
-          {Object.entries(returnStatusLabels).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          {STATUS_FILTER.map((k) => (
+            <option key={k} value={k}>{labelOf(returnStatusLabels, k).label}</option>
+          ))}
         </Select>
         <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />
       </Card>

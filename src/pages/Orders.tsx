@@ -32,7 +32,9 @@ const SCOPE_OPTIONS: { value: OrdersScope; label: string }[] = [
 
 export default function Orders() {
   const navigate = useNavigate();
-  const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
+  // الافتراضي «النهارده»: الشاشة دي شغل اليوم الجاري، وأي طلب اتقفل (اتدفع أو
+  // اتلغى) مستنده في الفواتير. الفترة لسه قابلة للتغيير للمراجعة.
+  const [range, setRange] = useState<DateRange>({ from: todayISO(), to: todayISO() });
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -57,6 +59,20 @@ export default function Orders() {
     }),
     placeholderData: keepPreviousData,
   });
+
+  // عملية جارية من يوم فات مش مفروض تضيع ورا فلتر «النهارده» — بنعدّها وبنعرض
+  // زرار بيوسّع الفترة عشان الأدمن يلحقها. العدّ بيتعمل لما الفلتر يكون على
+  // وضعه الافتراضي بس.
+  const onToday = scope === 'current' && range.from === todayISO() && range.to === todayISO();
+  const older = useQuery({
+    queryKey: ['orders-open-before', range.from],
+    queryFn: () => fetchOrders({
+      from: null, to: daysAgoISO(1), search: '', status: 'all', method: 'all',
+      scope: 'current', sort: 'placed_at', dir: 'desc', page: 0, pageSize: 1,
+    }),
+    enabled: onToday,
+  });
+  const olderCount = onToday ? (older.data?.total ?? 0) : 0;
 
   function toggleSort(key: string) {
     if (key === sort) setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -87,7 +103,7 @@ export default function Orders() {
         title="الطلبات"
         subtitle={
           scope === 'current'
-            ? 'العمليات الجارية فقط — الطلب المدفوع أو الملغي مستنده في قسم الفواتير'
+            ? 'عمليات اليوم الجارية — الطلب المدفوع أو الملغي مستنده في قسم الفواتير'
             : 'بحث برقم الطلب أو اسم المشتري أو البائع'
         }
       />
@@ -114,7 +130,16 @@ export default function Orders() {
           <option value="all">كل الطرق</option>
           {METHOD_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </Select>
-        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} />
+        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets />
+        {olderCount > 0 && (
+          <button
+            type="button"
+            onClick={() => { setRange({ from: '', to: todayISO() }); setPage(0); }}
+            className="h-8 rounded-lg border border-accent/40 bg-accent/10 px-2 text-xs text-accent transition-colors hover:bg-accent/20"
+          >
+            {olderCount} عملية جارية من أيام سابقة — اعرضها
+          </button>
+        )}
       </Card>
 
       <DataTable

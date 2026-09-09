@@ -18,7 +18,14 @@ export function Modal({ title, open, onClose, children, wide = false }: {
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-primary/40 p-4" onMouseDown={onClose}>
+    // المودال بيتعمل له render جوه الصف في بعض الجداول (زي خانة الرسوم في
+    // «المال»)، والصف نفسه عليه onClick بيفتح صفحة الحساب — فأي ضغطة جوه
+    // المودال كانت بتطلع للصف وتنقّل الصفحة وتقفل المودال. بنوقف الضغطة هنا.
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-primary/40 p-4"
+      onMouseDown={onClose}
+      onClick={(e) => e.stopPropagation()}
+    >
       <div
         className={`max-h-[88vh] w-full overflow-y-auto rounded-(--radius-card) bg-white p-5 shadow-xl ${wide ? 'max-w-3xl' : 'max-w-lg'}`}
         onMouseDown={(e) => e.stopPropagation()}

@@ -19,7 +19,6 @@ export type CurrentPlan = {
   fee: number;
   from: string | null;
   to: string | null;
-  cycles: number | null;
 };
 
 export const planOf = (row: AccountRow): CurrentPlan => ({
@@ -28,7 +27,6 @@ export const planOf = (row: AccountRow): CurrentPlan => ({
   fee: row.billingFee,
   from: row.billingFrom,
   to: row.billingTo,
-  cycles: row.billingCycles,
 });
 
 /** نص مختصر للخطة زي ما بيتعرض في الخلية. */
@@ -43,6 +41,19 @@ export function billingSummary(row: AccountRow): string {
 /** مدّة سريان الخطة — «بدون مدة محددة» لو الخطة مفتوحة. */
 export function billingPeriod(row: AccountRow): string {
   return periodText(row.billingFrom, row.billingTo);
+}
+
+/**
+ * مدّة الخطة بالأيام = تاريخ النهاية ناقص تاريخ البداية.
+ * الرقم ده كان بيتكتب بالإيد في خانة «عدد الدورات» — بقى بيتحسب من التاريخين
+ * عشان مايبقاش فيه رقمين بيقولوا نفس الحاجة ويختلفوا.
+ */
+export function planDays(from: string, to: string): number | null {
+  if (!from || !to) return null;
+  const a = Date.parse(`${from}T00:00:00`);
+  const b = Date.parse(`${to}T00:00:00`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((b - a) / 86_400_000);
 }
 
 export function periodText(from: string | null, to: string | null): string {
@@ -96,7 +107,7 @@ export function BillingPlanDialog({ subject, subjectId, name, current, onClose }
   const [fee, setFee] = useState(String(current.fee ?? 0));
   const [from, setFrom] = useState(current.from ?? '');
   const [to, setTo] = useState(current.to ?? '');
-  const [cycles, setCycles] = useState(current.cycles == null ? '' : String(current.cycles));
+  const days = planDays(from, to);
 
   const save = useMutation({
     mutationFn: () =>
@@ -108,7 +119,6 @@ export function BillingPlanDialog({ subject, subjectId, name, current, onClose }
         fee: planKind === 'subscription' ? Number(fee || 0) : null,
         startsOn: from || null,
         endsOn: to || null,
-        cycles: cycles.trim() === '' ? null : Number(cycles),
       }),
     onSuccess: () => {
       toast('success', `تم تحديث رسوم «${name}»`);
@@ -133,7 +143,7 @@ export function BillingPlanDialog({ subject, subjectId, name, current, onClose }
         <Field
           label="نظام الرسوم"
           hint={allowCommission
-            ? 'البائع إما يدفع نسبة من مبيعاته أو اشتراكًا ثابتًا للمدة'
+            ? 'نسبة: المنصة تاخد نسبتها أول ما المشتري يدفع والباقي للبائع · اشتراك: مبلغ ثابت البائع يحوّله للمنصة عن المدة'
             : 'المشتري يدفع اشتراكًا ثابتًا فقط — صفر يعني حساب مجاني'}
         >
           <Select
@@ -167,13 +177,24 @@ export function BillingPlanDialog({ subject, subjectId, name, current, onClose }
             <Input dir="ltr" type="date" value={to} min={from || undefined}
               onChange={(e) => setTo(e.target.value)} />
           </Field>
-          {/* رقم توثيقي: بيتخزّن مع الخطة ولا يحرّك تحصيلًا تلقائيًا — التحصيل
-              لسه يدوي، فالحقل بيقول الاتفاق كام دورة بس. */}
-          <Field label="عدد الدورات" hint="عدد الشهور المتفق عليها — للتوثيق، التحصيل يدوي">
-            <Input dir="ltr" type="number" min={1} step="1" value={cycles}
-              onChange={(e) => setCycles(e.target.value)} />
+          {/* المدة محسوبة من التاريخين — مش حقل بيتكتب. */}
+          <Field label="المدة" hint="فرق التاريخين — بيتحسب لوحده">
+            <Input
+              dir="rtl"
+              readOnly
+              className="bg-surface"
+              value={days == null ? '—' : `${days} يوم`}
+            />
           </Field>
         </div>
+
+        {planKind === 'subscription' && (
+          <p className="rounded-lg bg-accent-soft/60 p-2.5 text-xs text-primary">
+            البائع بيحوّل قيمة الاشتراك للمنصة عن المدة دي. لو المدة خلصت من غير سداد،
+            الحساب بيتعلّق تلقائيًا وسبب التعليق بيبان «عدم سداد الاشتراك» — التفعيل
+            بيرجع بتجديد المدة من هنا.
+          </p>
+        )}
 
         <div className="flex justify-end gap-2">
           <Btn variant="ghost" onClick={onClose} disabled={save.isPending}>إلغاء</Btn>

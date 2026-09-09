@@ -54,7 +54,7 @@ export const paymentMethodLabels: LabelMap = {
 // البائع مع إلغاء المشتري لطلب الإرجاع.
 export const returnStatusLabels: LabelMap = {
   draft: { label: 'مسودة', tone: 'gray' },
-  submitted: { label: 'لم يتم قبوله بعد', tone: 'orange' },
+  submitted: { label: 'تم تقديمه', tone: 'orange' },
   seller_review: { label: 'مراجعة البائع', tone: 'blue' },
   approved: { label: 'مقبول', tone: 'green' },
   partially_approved: { label: 'مقبول جزئيًا', tone: 'blue' },

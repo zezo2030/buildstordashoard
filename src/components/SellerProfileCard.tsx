@@ -2,13 +2,14 @@
 // المشتري، وتعديلها في مكان واحد (نفس حقول فورم إضافة بائع).
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Pencil, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import {
   emptySellerProfile, fetchSellerProfile, saveSellerProfile,
   PAYMENT_METHODS, type SellerProfile,
 } from '../api/seller-profile';
 import { SellerProfileFields } from './SellerProfileFields';
-import { Btn, Card, Spinner, ErrorState } from './ui';
+import { Btn, Card, Spinner, ErrorState, Input } from './ui';
 import { useToast } from './Toast';
 import { fmtDate, localPhone } from '../lib/format';
 
@@ -44,7 +45,8 @@ export function SellerProfileCard({ companyId }: { companyId: string }) {
   }, [q.data, editing]);
 
   const save = useMutation({
-    mutationFn: () => saveSellerProfile(companyId, draft),
+    mutationFn: (override: SellerProfile | undefined) =>
+      saveSellerProfile(companyId, override ?? draft),
     onSuccess: () => {
       toast('success', 'تم حفظ بيانات الشركة');
       setEditing(false);
@@ -84,7 +86,7 @@ export function SellerProfileCard({ companyId }: { companyId: string }) {
             <Btn variant="ghost" onClick={() => { setDraft(p); setEditing(false); }} disabled={save.isPending}>
               إلغاء
             </Btn>
-            <Btn variant="accent" busy={save.isPending} onClick={() => save.mutate()}>حفظ</Btn>
+            <Btn variant="accent" busy={save.isPending} onClick={() => save.mutate(undefined)}>حفظ</Btn>
           </div>
         ) : (
           <Btn variant="ghost" onClick={() => { setDraft(p); setEditing(true); }}>تعديل</Btn>
@@ -113,7 +115,11 @@ export function SellerProfileCard({ companyId }: { companyId: string }) {
             <Row label="طرق الدفع" value={p.paymentMethods.map(labelOfPayment).join('، ')} />
             <Row label="التخصصات" value={specialtyNames.join('، ')} />
             <Row label="الرقم الآلي للمحل" value={p.shopNumber} dir="ltr" />
-            <Row label="رقم العقد" value={p.contractNumber} dir="ltr" />
+            <ContractNumberRow
+              value={p.contractNumber}
+              busy={save.isPending}
+              onSave={(v) => save.mutate({ ...p, contractNumber: v })}
+            />
             <Row
               label="مدة العقد"
               value={
@@ -159,6 +165,76 @@ export function SellerProfileCard({ companyId }: { companyId: string }) {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * رقم العقد بيتغيّر لوحده كتير (تجديد أو تصحيح رقم)، فبقى ليه قلم في نفس
+ * الخانة بدل ما الأدمن يفتح تعديل الكارت كله ويعدي على كل الحقول.
+ */
+function ContractNumberRow({ value, busy, onSave }: {
+  value: string;
+  busy: boolean;
+  onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (!editing) {
+    return (
+      <div className="flex justify-between gap-2">
+        <dt className="text-subtext">رقم العقد</dt>
+        <dd dir="ltr" className="flex min-w-0 items-center gap-1 break-words text-end">
+          <span>{value || <span className="text-subtext">—</span>}</span>
+          <button
+            type="button"
+            title="تعديل رقم العقد"
+            className="rounded-lg p-1 text-subtext hover:bg-surface hover:text-primary"
+            onClick={() => { setDraft(value); setEditing(true); }}
+          >
+            <Pencil size={13} />
+          </button>
+        </dd>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <dt className="text-subtext">رقم العقد</dt>
+      <dd className="flex min-w-0 items-center gap-1">
+        <Input
+          dir="ltr"
+          autoFocus
+          className="h-8 w-36"
+          value={draft}
+          disabled={busy}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { onSave(draft.trim()); setEditing(false); }
+            if (e.key === 'Escape') setEditing(false);
+          }}
+        />
+        <button
+          type="button"
+          title="حفظ"
+          disabled={busy}
+          className="rounded-lg p-1 text-success hover:bg-surface"
+          onClick={() => { onSave(draft.trim()); setEditing(false); }}
+        >
+          <Check size={15} />
+        </button>
+        <button
+          type="button"
+          title="إلغاء"
+          disabled={busy}
+          className="rounded-lg p-1 text-subtext hover:bg-surface"
+          onClick={() => setEditing(false)}
+        >
+          <X size={15} />
+        </button>
+      </dd>
+    </div>
   );
 }
 

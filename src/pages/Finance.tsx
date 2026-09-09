@@ -23,7 +23,8 @@ import {
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
 import { ReturnDetailsModal } from '../components/ReturnDetailsModal';
-import { BillingCell, billingPeriod, billingSummary } from './accounts/BillingCell';
+import { BillingCell } from './accounts/BillingCell';
+import { statusCell } from './accounts/columns';
 import { fmtDate, fmtDateTime, money } from '../lib/format';
 import { localPhone } from '../lib/format';
 import { downloadCsv } from '../lib/csv';
@@ -157,26 +158,10 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
       sortKey: 'total',
       render: (r) => <Money value={r.total} />,
     },
-    {
-      key: 'status',
-      header: 'الحالة',
-      sortKey: 'status',
-      render: (r) => <StatusChip label={r.status === 'active' ? 'نشط' : 'موقوف'} tone={r.status === 'active' ? 'green' : 'red'} />,
-    },
+    // نفس خلية الحسابات: الموقوف بيبان معاه سبب الوقف — والتعليق التلقائي
+    // بيكتب «عدم سداد الاشتراك» فالأدمن يعرف إن السبب رسوم مش مخالفة.
+    { key: 'status', header: 'الحالة', sortKey: 'status', render: statusCell },
   ];
-
-  function exportCsv() {
-    downloadCsv(
-      `finance-${kind}-${range.from || 'all'}`,
-      ['الاسم', 'ID', 'الهاتف', 'الحسابات النشطة', 'نظام الرسوم', 'المدة', 'الرسوم المحصّلة',
-        isSeller ? 'إجمالي المبيعات' : 'إجمالي المشتريات', 'الحالة'],
-      rows.map((r) => [
-        r.name, r.accountCode ?? '', localPhone(r.phone), r.subAccounts,
-        billingSummary(r), billingPeriod(r), money(r.feesCollected), money(r.total),
-        r.status === 'active' ? 'نشط' : 'موقوف',
-      ]),
-    );
-  }
 
   return (
     <div>
@@ -241,9 +226,6 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
           <option value="active">نشط</option>
           <option value="suspended">موقوف</option>
         </Select>
-        <Btn variant="ghost" onClick={exportCsv} disabled={rows.length === 0}>
-          <Download size={15} /> تصدير
-        </Btn>
       </Card>
 
       <DataTable

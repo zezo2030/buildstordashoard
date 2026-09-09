@@ -354,7 +354,7 @@ function SellerBillingRow({ companyId, name }: { companyId: string; name: string
     queryFn: async () => {
       const { data, error } = await supabase
         .from('billing_plans')
-        .select('kind, rate, fee, starts_on, ends_on, cycles')
+        .select('kind, rate, fee, starts_on, ends_on')
         .eq('subject_type', 'seller')
         .eq('subject_id', companyId)
         .eq('is_active', true)
@@ -371,7 +371,6 @@ function SellerBillingRow({ companyId, name }: { companyId: string; name: string
     fee: Number(p?.fee ?? 0),
     from: p?.starts_on ?? null,
     to: p?.ends_on ?? null,
-    cycles: p?.cycles ?? null,
   };
   const summary = current.kind === 'subscription'
     ? (current.fee > 0 ? `اشتراك ${money(current.fee)}` : 'اشتراك مجاني')

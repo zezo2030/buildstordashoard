@@ -37,7 +37,6 @@ export type AccountRow = {
   billingFee: number;
   billingFrom: string | null;
   billingTo: string | null;
-  billingCycles: number | null;
   /** الاشتراكات المحصّلة فعليًا خلال الفترة المختارة */
   feesCollected: number;
 };
@@ -110,7 +109,6 @@ function toRow(r: Record<string, unknown>): AccountRow {
     billingFee: num(r.billing_fee),
     billingFrom: (r.billing_from as string | null) ?? null,
     billingTo: (r.billing_to as string | null) ?? null,
-    billingCycles: r.billing_cycles == null ? null : num(r.billing_cycles),
     feesCollected: num(r.fees_collected),
   };
 }
@@ -342,7 +340,6 @@ export type BillingPlanInput = {
   fee?: number | null;
   startsOn?: string | null;
   endsOn?: string | null;
-  cycles?: number | null;
   note?: string | null;
 };
 
@@ -364,7 +361,6 @@ export async function setBillingPlan(input: BillingPlanInput): Promise<void> {
     p_fee: input.kind === 'subscription' ? Number(input.fee ?? 0) : 0,
     p_starts_on: input.startsOn || undefined,
     p_ends_on: input.endsOn || undefined,
-    p_cycles: input.cycles ?? undefined,
     p_note: input.note?.trim() || undefined,
   });
 }
