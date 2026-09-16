@@ -50,20 +50,53 @@ export const paymentMethodLabels: LabelMap = {
   cash_on_delivery: { label: 'كاش عند التوصيل', tone: 'gray' },
 };
 
-// التسميات هنا بتقول مين اللي عمل الحاجة: «مرفوض» لوحدها كانت بتلخبط رفض
-// البائع مع إلغاء المشتري لطلب الإرجاع.
+// أربع حالات في اللوحة بدل عشرة.
+//
+// العشرة اللي في الإينَم بيوصفوا عملية بين البائع والمشتري (مراجعة بائع،
+// استلام من العميل، وصول للبائع…) والأدمن مش طرف فيها — اللي يهمّه النتيجة:
+// اتقدّم · مقبول · رفض مين. التطبيق نفسه (شاشة المشتري وشاشة البائع) لسه
+// بيعرض التفصيل كامل لأن الطرفين دول محتاجينه فعلاً.
+//
+// التسمية بتقول مين اللي عمل الحاجة: «مرفوض» لوحدها كانت بتلخبط رفض البائع
+// مع إلغاء المشتري لطلب الإرجاع.
+//
+// نظير الفلترة في الداتابيز: `app.return_status_group` — أي حالة جديدة في
+// الإينَم لازم تتحط في الاتنين.
 export const returnStatusLabels: LabelMap = {
-  draft: { label: 'مسودة', tone: 'gray' },
+  draft: { label: 'تم تقديمه', tone: 'orange' },
   submitted: { label: 'تم تقديمه', tone: 'orange' },
-  seller_review: { label: 'مراجعة البائع', tone: 'blue' },
+  seller_review: { label: 'تم تقديمه', tone: 'orange' },
   approved: { label: 'مقبول', tone: 'green' },
-  partially_approved: { label: 'مقبول جزئيًا', tone: 'blue' },
+  partially_approved: { label: 'مقبول', tone: 'green' },
+  picked_up: { label: 'مقبول', tone: 'green' },
+  received: { label: 'مقبول', tone: 'green' },
+  refunded: { label: 'مقبول', tone: 'green' },
   rejected: { label: 'رفض من البائع', tone: 'red' },
-  picked_up: { label: 'تم الاستلام من العميل', tone: 'navy' },
-  received: { label: 'وصل للبائع', tone: 'navy' },
-  refunded: { label: 'تم رد المبلغ', tone: 'green' },
   cancelled: { label: 'رفض من المشتري', tone: 'gray' },
 };
+
+/** مفاتيح المجموعات اللي `admin_returns_list` بيقبلها في `p_status`. */
+export const RETURN_STATUS_FILTERS: [string, string][] = [
+  ['submitted', 'تم تقديمه'],
+  ['accepted', 'مقبول'],
+  ['rejected', 'رفض من البائع'],
+  ['cancelled', 'رفض من المشتري'],
+];
+
+const ACCEPTED_RETURN_STATUSES = new Set(
+  ['approved', 'partially_approved', 'picked_up', 'received', 'refunded'],
+);
+
+/**
+ * السند اتقبل والفلوس لسه ما رجعتش للعميل.
+ *
+ * دي التفرقة الوحيدة اللي التجميع مايقدرش يستغنى عنها: «مقبول» بتضم `approved`
+ * (لسه البضاعة عند العميل) لحد `refunded` (خلصت)، ومن غير العلامة دي مبلغ
+ * مستحق للعملاء بيختفي جوّه كلمة «مقبول».
+ */
+export function isRefundPending(status: string, refundedAt: string | null): boolean {
+  return !refundedAt && ACCEPTED_RETURN_STATUSES.has(status);
+}
 
 export const refundMethodLabels: LabelMap = {
   wallet: { label: 'رصيد المحفظة', tone: 'green' },
@@ -92,6 +125,7 @@ export const walletTxnLabels: LabelMap = {
   order_refund: { label: 'استرداد طلب', tone: 'blue' },
   return_credit: { label: 'رصيد مرتجع', tone: 'blue' },
   commission: { label: 'عمولة', tone: 'orange' },
+  subscription: { label: 'اشتراك المنصة', tone: 'orange' },
   adjustment: { label: 'تسوية إدارية', tone: 'gray' },
 };
 
@@ -130,9 +164,42 @@ export const appSettingMeta: Record<string, { label: string; hint: string; kind:
   return_window_days: { label: 'مدة الإرجاع (أيام)', hint: 'كم يوم يقدر المشتري يطلب إرجاع بعد التوصيل', kind: 'number' },
   default_commission_rate: { label: 'نسبة العمولة الافتراضية %', hint: 'عمولة المنصة على البائع الجديد إذا ما تحددت نسبة خاصة', kind: 'number' },
   quotation_validity_days: { label: 'صلاحية عرض السعر (أيام)', hint: 'كم يوم يفضل عرض السعر ساري قبل ما ينتهي', kind: 'number' },
+  delivery_due_days: {
+    label: 'مهلة التسليم (أيام)',
+    hint: 'بعد تأكيد الطلب بكام يوم من غير تسليم يتبعت تنبيه للبائع والمشتري ويتعلّم «متأخر التسليم» في قايمة الطلبات. التنبيه مرة واحدة والطلب ما بيتلغيش تلقائيًا',
+    kind: 'number',
+  },
   wallet_topup_min: { label: 'أقل شحن محفظة (د.ك)', hint: 'أقل مبلغ يقدر المستخدم يشحن به محفظته', kind: 'number' },
   wallet_topup_max: { label: 'أعلى شحن محفظة (د.ك)', hint: 'أعلى مبلغ شحن في العملية الواحدة', kind: 'number' },
   whatsapp_support: { label: 'رقم واتساب الدعم', hint: 'الرقم اللي بيتفتح لما المستخدم يضغط تواصل عبر واتساب', kind: 'phone' },
+  // اشتراك المشتري: القيمة والمدة **للمنصة كلها**، مش لكل عميل. تغيّر الرقم
+  // هنا فيسري على كل التجديدات الجاية من غير ما تلمس حساب واحد. الفرق الوحيد
+  // المسموح بيه بين العملاء هو فرد ↔ شركة.
+  subscription_fee_individual: {
+    label: 'اشتراك المشتري الفرد (د.ك)',
+    hint: 'قيمة الدورة الواحدة لكل مشتري فرد. صفر = مجاني للكل',
+    kind: 'number',
+  },
+  subscription_fee_company: {
+    label: 'اشتراك المشتري الشركة (د.ك)',
+    hint: 'قيمة الدورة الواحدة لكل مشتري شركة. صفر = مجاني للكل',
+    kind: 'number',
+  },
+  subscription_period_days: {
+    label: 'مدة الاشتراك (أيام)',
+    hint: 'طول الدورة اللي بيتمدّها كل دفعة. بيسري على التجديدات الجاية، والمدد الحالية ما بتتغيّرش',
+    kind: 'number',
+  },
+  subscription_trial_days: {
+    label: 'التجربة المجانية (أيام)',
+    hint: 'الحساب الجديد بياخد المدة دي من غير دفع. صفر = يدفع من أول يوم',
+    kind: 'number',
+  },
+  subscription_reminder_days: {
+    label: 'التذكير قبل الانتهاء (أيام)',
+    hint: 'إشعار للمشتري اللي رصيده مش هيغطي التجديد التلقائي. اللي رصيده يغطي بيتجدد لوحده من غير إزعاج',
+    kind: 'number',
+  },
   platform_seller_enabled: {
     label: 'بائع Build Store',
     hint: 'عند الفتح تظهر مواد الكتالوج غير المربوطة بأي شركة للعرض فقط — من غير سعر ولا شراء. الربط بشركة يخفيها من بائع Build Store فورًا',

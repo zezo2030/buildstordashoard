@@ -112,7 +112,14 @@ export function SellerProfileCard({ companyId }: { companyId: string }) {
 
           <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
             <Row label="أرقام التليفون" value={p.phones.map(localPhone).join('، ')} dir="ltr" />
-            <Row label="طرق الدفع" value={p.paymentMethods.map(labelOfPayment).join('، ')} />
+            {/* فاضية = كل الطرق، مش «ولا طريقة» — نفس المعنى اللي في
+                `app.company_accepts_payment` وفي شاشة الشراء. */}
+            <Row
+              label="طرق الدفع"
+              value={p.paymentMethods.length
+                ? p.paymentMethods.map(labelOfPayment).join('، ')
+                : 'كل الطرق (غير محددة)'}
+            />
             <Row label="التخصصات" value={specialtyNames.join('، ')} />
             <Row label="الرقم الآلي للمحل" value={p.shopNumber} dir="ltr" />
             <ContractNumberRow

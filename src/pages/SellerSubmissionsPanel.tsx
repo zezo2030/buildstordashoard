@@ -1,11 +1,12 @@
 // عرض اقتراحات البائعين داخل «طلبات المواد» — مش جدول زي طلب المشتري:
 // قائمة كروت + لوحة تفاصيل بنفس أقسام فورم «اضافة منتج جديد».
 import { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
 import { Btn, Card, EmptyState, ErrorState, Field, Select, Spinner, StatusChip, Textarea } from '../components/ui';
 import { PAGE_SIZE } from '../components/DataTable';
-import { Modal } from '../components/Modal';
+import { ConfirmDialog, Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { fmtDateTime } from '../lib/format';
 import { productSubmissionStatusLabels, labelOf } from '../lib/labels';
@@ -43,6 +44,7 @@ export function SellerSubmissionsPanel() {
   const [status, setStatus] = useState('open');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<{ row: SubmissionRow; to: SubmissionStatus } | null>(null);
+  const [deleting, setDeleting] = useState<SubmissionRow | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['product-submissions', status, page],
@@ -89,6 +91,21 @@ export function SellerSubmissionsPanel() {
       qc.invalidateQueries({ queryKey: ['product-submissions'] });
       qc.invalidateQueries({ queryKey: ['nav-badges'] });
       qc.invalidateQueries({ queryKey: ['overview-open-submissions'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc('admin_delete_product_submission', { p_id: id });
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'اتشال من القايمة');
+      setDeleting(null);
+      setSelectedId(null);
+      qc.invalidateQueries({ queryKey: ['product-submissions'] });
+      qc.invalidateQueries({ queryKey: ['nav-badges'] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -151,6 +168,7 @@ export function SellerSubmissionsPanel() {
             <SellerDetail
               row={selected}
               onDecide={(to) => setDeciding({ row: selected, to })}
+              onDelete={() => setDeleting(selected)}
             />
           )}
         </div>
@@ -165,18 +183,32 @@ export function SellerSubmissionsPanel() {
           onSubmit={(note) => decide.mutate({ id: deciding.row.id, to: deciding.to, note })}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleting}
+        title="حذف الاقتراح من القايمة"
+        message={`«${deleting?.name_ar ?? ''}» هيتشال من الشاشة. القرار اللي اتاخد عليه بيفضل محفوظ في سجل التدقيق، والمادة لو اتضافت للكتالوج مش هتتأثر.`}
+        confirmLabel="حذف"
+        danger
+        busy={remove.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => { if (deleting) remove.mutate(deleting.id); }}
+      />
     </div>
   );
 }
 
-function SellerDetail({ row, onDecide }: {
+function SellerDetail({ row, onDecide, onDelete }: {
   row: SubmissionRow;
   onDecide: (to: SubmissionStatus) => void;
+  onDelete: () => void;
 }) {
   const sections = sellerSubmissionSections(row);
   const description = sections.find((s) => s.label === 'الوصف');
   const rest = sections.filter((s) => s.label !== 'الوصف');
   const actions = nextStatuses(row.status);
+  // الحذف للمقفول بس — مرآة للحارس جوه `admin_delete_product_submission`.
+  const canDelete = actions.length === 0;
 
   return (
     <Card className="min-w-0 flex-1 p-5">
@@ -222,19 +254,28 @@ function SellerDetail({ row, onDecide }: {
         <p className="mt-4 text-xs text-subtext">ملاحظة الإدارة: {row.admin_note}</p>
       )}
 
-      {actions.length > 0 && (
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
-          {actions.map((to) => (
-            <Btn
-              key={to}
-              variant={to === 'rejected' ? 'ghost' : 'accent'}
-              onClick={() => onDecide(to)}
-            >
-              {DECISION_LABELS[to]}
-            </Btn>
-          ))}
-        </div>
-      )}
+      <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+        {/* الاقتراح اللي لسه مفتوح ده بائع مستني رد، وحذفه بيخليه مستني
+            للأبد — القرار الصح هناك الرفض، وبيوصله إشعار. */}
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="me-auto flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs text-subtext transition-colors hover:border-danger/40 hover:text-danger"
+          >
+            <Trash2 size={13} /> حذف من القايمة
+          </button>
+        )}
+        {actions.map((to) => (
+          <Btn
+            key={to}
+            variant={to === 'rejected' ? 'ghost' : 'accent'}
+            onClick={() => onDecide(to)}
+          >
+            {DECISION_LABELS[to]}
+          </Btn>
+        ))}
+      </div>
     </Card>
   );
 }

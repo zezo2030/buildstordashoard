@@ -1,12 +1,10 @@
-// المحافظ — كل محافظ المستخدمين والشركات + دفتر الحركات + تسوية يدوية (RPC).
+// المحافظ — كل محافظ المستخدمين والشركات + دفتر الحركات (قراءة فقط).
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase, arError } from '../lib/supabase';
-import { walletAdjust } from '../api/admin';
-import { PageHeader, Btn, Field, Input, Textarea, StatusChip, Money, Select } from '../components/ui';
+import { PageHeader, Btn, StatusChip, Money, Select } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { Modal } from '../components/Modal';
-import { useToast } from '../components/Toast';
 import { fmtDateTime } from '../lib/format';
 import { walletTxnLabels, labelOf } from '../lib/labels';
 
@@ -23,7 +21,6 @@ export default function Wallets() {
   const [page, setPage] = useState(0);
   const [ownerType, setOwnerType] = useState('all');
   const [ledgerFor, setLedgerFor] = useState<WalletRow | null>(null);
-  const [adjustFor, setAdjustFor] = useState<WalletRow | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['wallets', ownerType, page],
@@ -77,14 +74,12 @@ export default function Wallets() {
       key: 'actions',
       header: 'الإجراء',
       render: (r) => (
-        <div className="flex flex-col gap-1">
-          <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setLedgerFor(r)}>
-            دفتر الحركات
-          </Btn>
-          <Btn variant="primary" className="px-2.5 py-1 text-xs" onClick={() => setAdjustFor(r)}>
-            تسوية
-          </Btn>
-        </div>
+        /* «تسوية» اتشالت: محفظة العميل فلوسه هو، والأدمن مالوش يودّع فيها
+           أو يسحب منها بإيده — ده تعديل على رصيد حد تاني من غير معاملة وراه.
+           دفتر الحركات باقي: القراءة حق الأدمن، الكتابة لأ. */
+        <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setLedgerFor(r)}>
+          دفتر الحركات
+        </Btn>
       ),
     },
   ];
@@ -114,7 +109,6 @@ export default function Wallets() {
         emptyTitle="لا توجد محافظ"
       />
       {ledgerFor && <LedgerModal wallet={ledgerFor} onClose={() => setLedgerFor(null)} />}
-      {adjustFor && <AdjustModal wallet={adjustFor} onClose={() => setAdjustFor(null)} />}
     </div>
   );
 }
@@ -160,64 +154,6 @@ function LedgerModal({ wallet, onClose }: { wallet: WalletRow; onClose: () => vo
           })}
         </div>
       )}
-    </Modal>
-  );
-}
-
-function AdjustModal({ wallet, onClose }: { wallet: WalletRow; onClose: () => void }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [direction, setDirection] = useState<'credit' | 'debit'>('credit');
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-
-  const m = useMutation({
-    mutationFn: () => {
-      const v = Math.abs(Number(amount));
-      if (!Number.isFinite(v) || v <= 0) throw new Error('أدخل مبلغًا صحيحًا أكبر من صفر');
-      return walletAdjust(wallet.id, direction === 'credit' ? v : -v, description.trim());
-    },
-    onSuccess: () => {
-      toast('success', 'تم تسجيل التسوية في دفتر المحفظة');
-      qc.invalidateQueries({ queryKey: ['wallets'] });
-      qc.invalidateQueries({ queryKey: ['wallet-ledger', wallet.id] });
-      onClose();
-    },
-    onError: (e) => toast('error', (e as Error).message),
-  });
-
-  return (
-    <Modal title={`تسوية يدوية — ${wallet.ownerName}`} open onClose={onClose}>
-      <div className="space-y-4">
-        <div className="rounded-lg bg-surface p-3 text-sm">
-          الرصيد الحالي: <Money value={wallet.balance} />
-        </div>
-        <Field label="نوع التسوية">
-          <Select value={direction} onChange={(e) => setDirection(e.target.value as 'credit' | 'debit')}>
-            <option value="credit">إيداع (+)</option>
-            <option value="debit">خصم (−)</option>
-          </Select>
-        </Field>
-        <Field label="المبلغ (د.ك)">
-          <Input dir="ltr" type="number" step="0.001" min="0.001" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </Field>
-        <Field label="وصف التسوية" hint="إلزامي — يظهر في دفتر الحركات">
-          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-        </Field>
-        <div className="flex justify-end gap-2">
-          <Btn variant="ghost" onClick={onClose} disabled={m.isPending}>
-            إلغاء
-          </Btn>
-          <Btn
-            variant={direction === 'debit' ? 'danger' : 'accent'}
-            busy={m.isPending}
-            disabled={!amount || !description.trim()}
-            onClick={() => m.mutate()}
-          >
-            تسجيل التسوية
-          </Btn>
-        </div>
-      </div>
     </Modal>
   );
 }

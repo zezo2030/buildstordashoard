@@ -327,19 +327,30 @@ function TaxonomyBrowser() {
     onError: (e) => toast('error', (e as Error).message),
   });
 
+  /**
+   * توقيف/تشغيل منتج من داخل المستوى.
+   *
+   * قايمة المستوى بتجيب `is_active = true` بس، فالتوقيف بيشيل الصف من قدام
+   * الأدمن على طول من غير ما يقول راح فين. الرسالة بتقول المكان اللي بيترجّع
+   * منه — من غيرها الأدمن مالوش دليل إن المنتج لسه موجود أصلاً.
+   */
   const toggleProduct = useMutation({
     mutationFn: async (p: ProductRow) => {
       const { error } = await supabase.from('products').update({ is_active: !p.is_active }).eq('id', p.id);
       if (error) throw new Error(arError(error));
+      return p;
     },
-    onSuccess: () => {
+    onSuccess: (p) => {
       qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
       qc.invalidateQueries({ queryKey: ['products'] });
+      if (p.is_active) {
+        toast('success', `${p.name_ar} اتأرشف — ترجّعه من صفحة «المنتجات» بفلتر «موقوف»`);
+      }
     },
     onError: (e) => toast('error', (e as Error).message),
   });
 
-  // حذف جماعي — الفلترة (عروض بائعين/مقايسات) بتحصل في الداتابيز عشان
+  // حذف جماعي — الفلترة (عروض بائعين/مقارنات) بتحصل في الداتابيز عشان
   // الحذف يبقى معاملة واحدة، والرد بيقول اتحذف كام واتمنع مين وليه.
   const removeSelected = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -352,7 +363,7 @@ function TaxonomyBrowser() {
       toast(
         blocked > 0 ? 'error' : 'success',
         blocked > 0
-          ? `تم حذف ${res.deleted} منتج — ${blocked} مربوط بعروض بائعين أو مقايسات فماتحذفش`
+          ? `تم حذف ${res.deleted} منتج — ${blocked} مربوط بعروض بائعين أو مقارنات فماتحذفش`
           : `تم حذف ${res.deleted} منتج`,
       );
       setSelectedIds([]);
@@ -826,7 +837,7 @@ function TaxonomyBrowser() {
       <ConfirmDialog
         open={bulkDeleting}
         title="حذف المنتجات المحددة"
-        message={`سيتم حذف ${selected.length} منتج نهائيًا. المنتج المربوط بعروض بائعين أو مقايسات مش هيتحذف وهيتقالك عليه.`}
+        message={`سيتم حذف ${selected.length} منتج نهائيًا. المنتج المربوط بعروض بائعين أو مقارنات مش هيتحذف وهيتقالك عليه.`}
         confirmLabel="حذف المحدد"
         danger
         busy={removeSelected.isPending}
@@ -1217,7 +1228,7 @@ function ConvertLevelModal({
         )}
         {mode === 'delete' && (
           <p className="text-xs text-danger">
-            الحذف نهائي وممنوع لو المنتج عليه عروض بائعين أو مقايسات — في الحالة دي استخدم الأرشفة أو النقل.
+            الحذف نهائي وممنوع لو المنتج عليه عروض بائعين أو مقارنات — في الحالة دي استخدم الأرشفة أو النقل.
           </p>
         )}
 

@@ -4,12 +4,12 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tansta
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Users, Building2, Store, ShoppingCart, Package, Wallet, Plus } from 'lucide-react';
 import {
-  fetchAccounts, fetchAccountsStats, reactivateAccount,
+  fetchAccounts, fetchAccountsStats, reactivateAccount, restoreAccount,
   type AccountKind, type AccountRow, type SortKey,
 } from '../../api/accounts';
 import { PageHeader, KpiCard, Input, Select, Money, Card, ErrorState, Btn } from '../../components/ui';
 import { DataTable, PAGE_SIZE } from '../../components/DataTable';
-import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../../components/DateRangePicker';
+import { DateRangePicker, type DateRange } from '../../components/DateRangePicker';
 import { PasswordModal } from '../../components/PasswordModal';
 import { useToast } from '../../components/Toast';
 import { buildColumns } from './columns';
@@ -40,10 +40,14 @@ const META: Record<AccountKind, { title: string; subtitle: string; empty: string
 
 export default function AccountsPage({ kind }: { kind: AccountKind }) {
   const navigate = useNavigate();
-  const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
+  // الافتراضي «كل الفترات» مش آخر 30 يوم: الأدمن بيفتح الصفحة عشان يشوف
+  // الصورة كاملة، والنافذة الضيقة كانت بتخبّي بيانات من غير ما تقول — ولازم
+  // يدوس زرار كل مرة عشان يشوف الباقي. الطرفان فاضيين = بدون حد،
+  // والـAPI بيحوّلهم null.
+  const [range, setRange] = useState<DateRange>({ from: '', to: '' });
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [status, setStatus] = useState<'all' | 'active' | 'suspended'>('all');
+  const [status, setStatus] = useState<'all' | 'active' | 'suspended' | 'deleted'>('all');
   const [sort, setSort] = useState<SortKey>('created_at');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
@@ -60,6 +64,22 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
     mutationFn: (r: AccountRow) => reactivateAccount(kind, r.id),
     onSuccess: (_d, r) => {
       toast('success', `تم إعادة تفعيل «${r.name}»`);
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      qc.invalidateQueries({ queryKey: ['accounts-stats'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  /**
+   * استرجاع حساب محذوف.
+   *
+   * الحذف الناعم بيخفي الحساب من كل الفلاتر التانية، فالصف ده ما بيظهرش إلا
+   * تحت «محذوف» — وده المكان الوحيد اللي الزرار بيبان فيه.
+   */
+  const restore = useMutation({
+    mutationFn: (r: AccountRow) => restoreAccount(kind, r.id),
+    onSuccess: (_d, r) => {
+      toast('success', `تم استرجاع «${r.name}» ورجع نشط`);
       qc.invalidateQueries({ queryKey: ['accounts'] });
       qc.invalidateQueries({ queryKey: ['accounts-stats'] });
     },
@@ -111,7 +131,9 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
     onSuspend: (r) => setSuspendFor(r),
     onReactivate: (r) => reactivate.mutate(r),
     onDelete: (r) => setDeleteFor(r),
+    onRestore: (r) => restore.mutate(r),
     isReactivating: (r) => reactivate.isPending && reactivate.variables?.id === r.id,
+    isRestoring: (r) => restore.isPending && restore.variables?.id === r.id,
     // key={r.id} إجباري هنا: DataTable بيعمل key={i} على الصفوف (فهرس، مش هوية)،
     // فلو الترتيب اتغيّر (فرز، صفحة جديدة، أو invalidate من تعليق متزامن) نفس
     // الـ instance من CommissionCell بيتعاد استخدامه لصف مختلف تماماً مع الاحتفاظ
@@ -154,7 +176,7 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
       {stats.isError ? (
         <div className="mb-4">
           <Card className="mb-3 p-4">
-            <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} />
+            <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />
           </Card>
           <Card className="p-4">
             <ErrorState
@@ -177,7 +199,7 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
             value={s ? <Money value={s.money} /> : '…'}
             icon={<ShoppingCart size={20} />}
             tone="orange"
-            footer={<DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} />}
+            footer={<DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />}
           />
           <KpiCard
             title={isSeller ? 'المواد المرفوعة' : 'إجمالي عدد المواد'}
@@ -209,6 +231,9 @@ export default function AccountsPage({ kind }: { kind: AccountKind }) {
           <option value="all">كل الحالات</option>
           <option value="active">نشط</option>
           <option value="suspended">موقوف</option>
+          {/* المحذوف بره «كل الحالات» عن قصد: هو مش حالة تشغيل، ده أرشيف —
+              ومخلطته بالنشط بيخلي القوايم والأرقام تكدب. */}
+          <option value="deleted">محذوف</option>
         </Select>
       </div>
 

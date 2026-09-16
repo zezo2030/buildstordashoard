@@ -51,6 +51,8 @@ export type ReturnBrief = {
   count: number;
   total: number;
   at: string;
+  /** null = اتقبل والفلوس لسه ما رجعتش. شوف `isRefundPending` في `labels.ts`. */
+  refundedAt: string | null;
 };
 
 export type SellerDashboard = {
@@ -66,6 +68,7 @@ export type SellerDashboard = {
   products: AmountRow[];
   sites: AmountRow[];
   siteOrders: CountRow[];
+  siteItems: CountRow[];
   productsByCustomer: GroupRows[];
   productsBySite: GroupRows[];
   returns: ReturnBrief[];
@@ -178,6 +181,7 @@ function returnBrief(r: Record<string, unknown>): ReturnBrief {
     count: num(r.count),
     total: num(r.total),
     at: String(r.at ?? ''),
+    refundedAt: (r.refunded_at as string | null) ?? null,
   };
 }
 
@@ -200,6 +204,7 @@ export function parseSellerDashboard(raw: unknown): SellerDashboard {
     products: rows(r.products).map(amountRow),
     sites: rows(r.sites).map(amountRow),
     siteOrders: rows(r.site_orders).map(countRow),
+    siteItems: rows(r.site_items).map(countRow),
     productsByCustomer: rows(r.products_by_customer).map(groupRows),
     productsBySite: rows(r.products_by_site).map(groupRows),
     returns: rows(r.returns).map(returnBrief),

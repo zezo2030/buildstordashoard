@@ -10,7 +10,7 @@ export type CatalogProductDeleteStore = {
 };
 
 const LINKED_MESSAGE =
-  'لا يمكن حذف المنتج لارتباطه بعروض بائعين أو مقايسات — أوقفه من المفتاح بدل الحذف';
+  'لا يمكن حذف المنتج لارتباطه بعروض بائعين أو مقارنات — أوقفه من المفتاح بدل الحذف';
 
 export function catalogProductDeleteBlockReason(links: CatalogProductLinks): string | null {
   if (links.sellerOfferCount > 0 || links.quotationItemCount > 0) return LINKED_MESSAGE;

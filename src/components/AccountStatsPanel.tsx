@@ -7,7 +7,7 @@ import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import {
-  ShoppingCart, Wallet, Package, Users, Store, MapPin, Eye,
+  ShoppingCart, Wallet, Package, Users, Store, MapPin,
 } from 'lucide-react';
 import {
   fetchBuyerCompanyDashboard,
@@ -31,9 +31,10 @@ import {
 } from '../lib/account-dashboard';
 import { Card, ErrorState, KpiCard, Money, Spinner, StatusChip } from './ui';
 import { Modal } from './Modal';
+import { ReturnDetailsModal } from './ReturnDetailsModal';
 import { DateRangePicker } from './DateRangePicker';
 import { fmtDateTime, money, qty } from '../lib/format';
-import { returnStatusLabels, labelOf } from '../lib/labels';
+import { returnStatusLabels, labelOf, isRefundPending } from '../lib/labels';
 
 /**
  * صف قابل للعرض في كارت مصغّر أو في مودال «عرض الكل». `qtyLabel` بتتعرض
@@ -45,6 +46,8 @@ type Listed = {
   note: string;
   imageUrl: string | null;
   qtyLabel: string | null;
+  /** رقم الكمية للفرز — qtyLabel نص معروض («5 حبة») وما ينفعش يترتّب بيه. */
+  qty: number;
   total: number;
 };
 
@@ -54,10 +57,68 @@ const asListed = (row: AmountRow, withQty = false): Listed => ({
   note: row.note,
   imageUrl: row.imageUrl,
   qtyLabel: withQty ? `${qty(row.qty)} ${row.unit}`.trim() : null,
+  qty: row.qty,
   total: row.total,
 });
 
-export function SellerStatsPanel({ companyId }: { companyId: string }) {
+/**
+ * فرز كروت التقارير.
+ *
+ * الكارت بيعرض أول تلات صفوف بس، فالترتيب هو اللي بيحدد **أي تلاتة** — ومن
+ * غير تحكم فيه الأدمن شايف الأعلى قيمة دايمًا، ومش لاقي الأقل ولا الأعلى
+ * كمية غير لما يفتح «عرض الكل» ويقعد يدوّر.
+ *
+ * الدوس على المقياس النشط بيقلب الاتجاه، وعلى التاني بيحوّل عليه — زرارين
+ * بدل أربعة، ونفس سلوك ترويسة أي جدول.
+ */
+type SortBy = 'total' | 'qty';
+type SortState = { by: SortBy; dir: 'desc' | 'asc' };
+
+const SORT_DESC: SortState = { by: 'total', dir: 'desc' };
+
+function SortBar({ value, onChange, qtyLabel = 'الكمية' }: {
+  value: SortState;
+  onChange: (v: SortState) => void;
+  qtyLabel?: string;
+}) {
+  const pick = (by: SortBy) =>
+    onChange(value.by === by ? { by, dir: value.dir === 'desc' ? 'asc' : 'desc' } : { by, dir: 'desc' });
+
+  const btn = (by: SortBy, label: string) => {
+    const on = value.by === by;
+    return (
+      <button
+        type="button"
+        onClick={() => pick(by)}
+        title={on ? (value.dir === 'desc' ? 'من الأعلى للأقل' : 'من الأقل للأعلى') : 'رتّب بـ' + label}
+        className={`rounded-md px-1.5 py-0.5 text-[11px] transition-colors ${
+          on ? 'bg-accent/10 text-accent' : 'text-subtext hover:text-primary'
+        }`}
+      >
+        {label}{on ? (value.dir === 'desc' ? ' ↓' : ' ↑') : ''}
+      </button>
+    );
+  };
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-line p-0.5">
+      {btn('total', 'القيمة')}
+      {btn('qty', qtyLabel)}
+    </div>
+  );
+}
+
+/** ترتيب رقمي بمقياسين — الصفوف كلها عندنا فيها الاتنين. */
+function sortRows<T>(rows: T[], v: SortState, of: (row: T, by: SortBy) => number): T[] {
+  // `rows` ممكن تيجي undefined لو الحمولة اتغيّرت والكاش لسه قديم — كارت فاضي
+  // أرحم من شاشة بيضا.
+  const list = rows ?? [];
+  const n = (r: T) => of(r, v.by);
+  return [...list].sort((a, b) => (v.dir === 'desc' ? n(b) - n(a) : n(a) - n(b)));
+}
+
+
+export function SellerStatsPanel({ companyId, selfName }: { companyId: string; selfName?: string }) {
   const [range, setRange] = useState<DashboardRange>(ALL_TIME);
   const q = useQuery({
     queryKey: ['seller-dashboard', companyId, range.from, range.to],
@@ -65,12 +126,12 @@ export function SellerStatsPanel({ companyId }: { companyId: string }) {
   });
   return (
     <StatsFrame range={range} onRange={setRange} query={q}>
-      {(d: SellerDashboard) => <SellerStatsBody d={d} />}
+      {(d: SellerDashboard) => <SellerStatsBody d={d} selfName={selfName} />}
     </StatsFrame>
   );
 }
 
-export function BuyerStatsPanel({ profileId }: { profileId: string }) {
+export function BuyerStatsPanel({ profileId, selfName }: { profileId: string; selfName?: string }) {
   const [range, setRange] = useState<DashboardRange>(ALL_TIME);
   const q = useQuery({
     queryKey: ['buyer-dashboard', profileId, range.from, range.to],
@@ -78,13 +139,13 @@ export function BuyerStatsPanel({ profileId }: { profileId: string }) {
   });
   return (
     <StatsFrame range={range} onRange={setRange} query={q}>
-      {(d: BuyerDashboard) => <BuyerStatsBody d={d} />}
+      {(d: BuyerDashboard) => <BuyerStatsBody d={d} selfName={selfName} />}
     </StatsFrame>
   );
 }
 
 /** أرقام شركة المشتري نفسها — من غير مشتريات مالكها الشخصية. */
-export function BuyerCompanyStatsPanel({ companyId }: { companyId: string }) {
+export function BuyerCompanyStatsPanel({ companyId, selfName }: { companyId: string; selfName?: string }) {
   const [range, setRange] = useState<DashboardRange>(ALL_TIME);
   const q = useQuery({
     queryKey: ['buyer-company-dashboard', companyId, range.from, range.to],
@@ -92,7 +153,7 @@ export function BuyerCompanyStatsPanel({ companyId }: { companyId: string }) {
   });
   return (
     <StatsFrame range={range} onRange={setRange} query={q}>
-      {(d: BuyerDashboard) => <BuyerStatsBody d={d} />}
+      {(d: BuyerDashboard) => <BuyerStatsBody d={d} selfName={selfName} />}
     </StatsFrame>
   );
 }
@@ -142,7 +203,7 @@ function StatsFrame<T>({ range, onRange, query, children }: {
   );
 }
 
-function SellerStatsBody({ d }: { d: SellerDashboard }) {
+function SellerStatsBody({ d, selfName }: { d: SellerDashboard; selfName?: string }) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -150,7 +211,8 @@ function SellerStatsBody({ d }: { d: SellerDashboard }) {
         <KpiCard title="عدد الطلبات" value={d.ordersCount} hint="طلب" icon={<ShoppingCart size={20} />} tone="orange" />
         <KpiCard title="المواد المباعة" value={d.productsSold} hint="منتج" icon={<Package size={20} />} tone="blue" />
         <KpiCard title="عدد العملاء" value={d.customersCount} hint="عميل" icon={<Users size={20} />} tone="navy" />
-        <KpiCard title="عدد المشاهدات" value="—" hint="لا يوجد مصدر في القاعدة" icon={<Eye size={20} />} tone="gray" />
+        {/* «عدد المشاهدات» اتشال: مفيش جدول مشاهدات ولا أحداث في القاعدة،
+            فالتايل كان بيعرض «—» دايمًا — خانة بتاخد مكان وما بتقولش حاجة. */}
         <KpiCard title="المواد المعروضة" value={d.listedItems} hint="مادة نشطة" icon={<Package size={20} />} tone="navy" />
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -180,17 +242,20 @@ function SellerStatsBody({ d }: { d: SellerDashboard }) {
         <GroupCard title="أكثر المنتجات شراءً لكل عميل" groups={d.productsByCustomer} />
         <GroupCard title="أكثر المنتجات شراءً لكل موقع" groups={d.productsBySite} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <CountCard title="عدد المواد في كل تخصص" unitLabel="مادة" rows={d.specialtyItems} />
+        {/* «مادة» هنا = صنف مختلف، نفس تعريف كارت التخصصات — مش مجموع كميات.
+            الموقع ممكن يبقى 4 مواد و2,324 قطعة. */}
+        <CountCard title="عدد المواد لكل موقع" unitLabel="مادة" rows={d.siteItems} />
         <CountCard title="عدد الطلبات لكل موقع" unitLabel="طلب" rows={d.siteOrders} />
         <CountCard title="عدد الطلبات لكل عميل" unitLabel="طلب" rows={d.customerOrders} />
       </div>
-      <ReturnsCard title="المرتجعات" partyLabel="المشتري" rows={d.returns} />
+      <ReturnsCard title="المرتجعات" party="buyer" selfName={selfName} rows={d.returns} />
     </>
   );
 }
 
-function BuyerStatsBody({ d }: { d: BuyerDashboard }) {
+function BuyerStatsBody({ d, selfName }: { d: BuyerDashboard; selfName?: string }) {
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -227,7 +292,7 @@ function BuyerStatsBody({ d }: { d: BuyerDashboard }) {
         <CountCard title="عدد المواد في كل تخصص" unitLabel="مادة" rows={d.specialtyItems} />
         <CountCard title="عدد الطلبات لكل موقع" unitLabel="طلب" rows={d.siteOrders} />
       </div>
-      <ReturnsCard title="المرتجعات" partyLabel="البائع" rows={d.returns} />
+      <ReturnsCard title="المرتجعات" party="seller" selfName={selfName} rows={d.returns} />
     </>
   );
 }
@@ -322,7 +387,10 @@ function LegendRow({ slice, total, index }: { slice: PieSlice; total: number; in
  */
 function CountCard({ title, unitLabel, rows }: { title: string; unitLabel: string; rows: CountRow[] }) {
   const [open, setOpen] = useState(false);
-  const shown = topRows(rows);
+  // المقياس هنا العدد نفسه (مادة/طلب) مش الكمية — هو الرقم اللي الكارت قايم عليه.
+  const [sort, setSort] = useState<SortState>(SORT_DESC);
+  const sorted = sortRows(rows, sort, (r, by) => (by === 'qty' ? r.count : r.total));
+  const shown = topRows(sorted);
 
   const body = (list: CountRow[]) => (
     <ol className="divide-y divide-line">
@@ -346,7 +414,10 @@ function CountCard({ title, unitLabel, rows }: { title: string; unitLabel: strin
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="font-bold">{title}</h3>
-        <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
+        <div className="flex shrink-0 items-center gap-2">
+          <SortBar value={sort} onChange={setSort} qtyLabel={unitLabel} />
+          <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
+        </div>
       </div>
       {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-subtext">لا توجد بيانات</p>
@@ -354,7 +425,7 @@ function CountCard({ title, unitLabel, rows }: { title: string; unitLabel: strin
         body(shown)
       )}
       <Modal title={title} open={open} onClose={() => setOpen(false)} wide>
-        {body(rows)}
+        {body(sorted)}
       </Modal>
     </Card>
   );
@@ -367,7 +438,12 @@ function CountCard({ title, unitLabel, rows }: { title: string; unitLabel: strin
 function GroupCard({ title, groups }: { title: string; groups: GroupRows[] }) {
   const [openGroup, setOpenGroup] = useState<GroupRows | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const shown = topRows(groups);
+  // الفرز على المجموعات وعلى صفوف المجموعة المفتوحة بنفس الاختيار: الأدمن
+  // بيسأل «أعلى عميل» و«أعلى مادة عنده» بنفس المقياس.
+  const [sort, setSort] = useState<SortState>(SORT_DESC);
+  const groupQty = (g: GroupRows) => g.rows.reduce((n, r) => n + r.qty, 0);
+  const sorted = sortRows(groups, sort, (g, by) => (by === 'qty' ? groupQty(g) : g.total));
+  const shown = topRows(sorted);
 
   const list = (items: GroupRows[]) => (
     <ol className="divide-y divide-line">
@@ -399,7 +475,10 @@ function GroupCard({ title, groups }: { title: string; groups: GroupRows[] }) {
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="font-bold">{title}</h3>
-        <ShowAll total={groups.length} visible={shown.length} onClick={() => setShowAll(true)} />
+        <div className="flex shrink-0 items-center gap-2">
+          <SortBar value={sort} onChange={setSort} />
+          <ShowAll total={groups.length} visible={shown.length} onClick={() => setShowAll(true)} />
+        </div>
       </div>
       {groups.length === 0 ? (
         <p className="py-8 text-center text-sm text-subtext">لا توجد بيانات</p>
@@ -408,7 +487,7 @@ function GroupCard({ title, groups }: { title: string; groups: GroupRows[] }) {
       )}
 
       <Modal title={title} open={showAll} onClose={() => setShowAll(false)} wide>
-        {list(groups)}
+        {list(sorted)}
       </Modal>
 
       <Modal
@@ -417,32 +496,61 @@ function GroupCard({ title, groups }: { title: string; groups: GroupRows[] }) {
         onClose={() => setOpenGroup(null)}
         wide
       >
-        <ListedRows rows={(openGroup?.rows ?? []).map((r) => asListed(r, true))} />
+        <ListedRows
+          rows={sortRows(
+            (openGroup?.rows ?? []).map((r) => asListed(r, true)),
+            sort,
+            (r, by) => (by === 'qty' ? r.qty : r.total),
+          )}
+        />
       </Modal>
     </Card>
   );
 }
 
-/** مرتجعات الحساب في فترة الفلتر — نفس حالات صفحة المرتجعات. */
-function ReturnsCard({ title, partyLabel, rows }: { title: string; partyLabel: string; rows: ReturnBrief[] }) {
+/**
+ * مرتجعات الحساب في فترة الفلتر — نفس حالات صفحة المرتجعات.
+ *
+ * الصف بيفتح سند المرتجع نفسه (`readOnly`): البنود والقيم والمستندات. القرار
+ * على البنود وتعليم الاستلام مكانهم صفحة المرتجعات — دي شاشة قراءة.
+ *
+ * `party` بيحدد الطرف المعروض في الصف، والطرف التاني هو صاحب الصفحة نفسه
+ * (`selfName`). كانوا تسميتين حرّتين قبل كده، وده كان بيخلي الاتنين ينفع
+ * يختلفوا في سطرين مختلفين.
+ */
+function ReturnsCard({ title, party, selfName, rows }: {
+  title: string;
+  party: 'buyer' | 'seller';
+  selfName?: string;
+  rows: ReturnBrief[];
+}) {
   const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<ReturnBrief | null>(null);
   const shown = topRows(rows);
+  const partyLabel = party === 'buyer' ? 'المشتري' : 'البائع';
 
   const body = (list: ReturnBrief[]) => (
     <ol className="divide-y divide-line">
       {list.map((r) => {
         const l = labelOf(returnStatusLabels, r.status);
         return (
-          <li key={r.id} className="flex flex-wrap items-center gap-2 py-2 text-sm">
-            <span className="font-medium" dir="ltr">{r.number}</span>
-            {r.orderNumber && <span className="text-xs text-subtext" dir="ltr">{r.orderNumber}</span>}
-            <span className="min-w-0 flex-1 truncate text-xs text-subtext">
-              {partyLabel}: {r.party || '—'}
-            </span>
-            <span className="shrink-0 text-xs tabular-nums text-subtext" dir="ltr">{r.count} مادة</span>
-            <StatusChip label={l.label} tone={l.tone} />
-            <span className="shrink-0 text-xs"><Money value={r.total} /></span>
-            <span className="shrink-0 text-xs text-subtext">{fmtDateTime(r.at)}</span>
+          <li key={r.id}>
+            <button
+              type="button"
+              onClick={() => setSelected(r)}
+              className="flex w-full flex-wrap items-center gap-2 py-2 text-right text-sm transition-colors hover:bg-surface/60"
+            >
+              <span className="font-medium" dir="ltr">{r.number}</span>
+              {r.orderNumber && <span className="text-xs text-subtext" dir="ltr">{r.orderNumber}</span>}
+              <span className="min-w-0 flex-1 truncate text-xs text-subtext">
+                {partyLabel}: {r.party || '—'}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-subtext" dir="ltr">{r.count} مادة</span>
+              <StatusChip label={l.label} tone={l.tone} />
+              {isRefundPending(r.status, r.refundedAt) && <StatusChip label="لسه ما اتردّش" tone="red" />}
+              <span className="shrink-0 text-xs"><Money value={r.total} /></span>
+              <span className="shrink-0 text-xs text-subtext">{fmtDateTime(r.at)}</span>
+            </button>
           </li>
         );
       })}
@@ -463,13 +571,31 @@ function ReturnsCard({ title, partyLabel, rows }: { title: string; partyLabel: s
       <Modal title={title} open={open} onClose={() => setOpen(false)} wide>
         {body(rows)}
       </Modal>
+      {selected && (
+        <ReturnDetailsModal
+          readOnly
+          row={{
+            id: selected.id,
+            returnNumber: selected.number,
+            status: selected.status,
+            orderNumber: selected.orderNumber || null,
+            buyerName: party === 'buyer' ? selected.party : selfName ?? null,
+            sellerName: party === 'seller' ? selected.party : selfName ?? null,
+            refundAmount: selected.total,
+            requestedAt: selected.at,
+          }}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </Card>
   );
 }
 
 function MiniCard({ title, hint, rows }: { title: string; hint?: string; rows: Listed[] }) {
   const [open, setOpen] = useState(false);
-  const shown = topRows(rows);
+  const [sort, setSort] = useState<SortState>(SORT_DESC);
+  const sorted = sortRows(rows, sort, (r, by) => (by === 'qty' ? r.qty : r.total));
+  const shown = topRows(sorted);
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
@@ -477,7 +603,10 @@ function MiniCard({ title, hint, rows }: { title: string; hint?: string; rows: L
           <h3 className="font-bold">{title}</h3>
           {hint && <p className="mt-0.5 text-[11px] text-subtext">{hint}</p>}
         </div>
-        <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
+        <div className="flex shrink-0 items-center gap-2">
+          <SortBar value={sort} onChange={setSort} />
+          <ShowAll total={rows.length} visible={shown.length} onClick={() => setOpen(true)} />
+        </div>
       </div>
       {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-subtext">لا توجد بيانات</p>
@@ -486,7 +615,7 @@ function MiniCard({ title, hint, rows }: { title: string; hint?: string; rows: L
       )}
 
       <Modal title={title} open={open} onClose={() => setOpen(false)} wide>
-        <ListedRows rows={rows} />
+        <ListedRows rows={sorted} />
       </Modal>
     </Card>
   );

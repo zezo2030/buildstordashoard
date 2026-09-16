@@ -139,9 +139,9 @@ export default function CompanyDetail() {
       {c.type === 'seller' && <SellerProfileCard companyId={c.id} />}
 
       {c.type === 'seller' ? (
-        <SellerStatsPanel companyId={c.id} />
+        <SellerStatsPanel companyId={c.id} selfName={c.name_ar} />
       ) : (
-        <BuyerCompanyStatsPanel companyId={c.id} />
+        <BuyerCompanyStatsPanel companyId={c.id} selfName={c.name_ar} />
       )}
 
       {c.type === 'seller' && (

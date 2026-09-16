@@ -58,6 +58,8 @@ export type FinanceReturnRow = {
   refundAmount: number;
   feesRefunded: number;
   executedAt: string;
+  /** null = اتقبل والفلوس لسه ما رجعتش. شوف `isRefundPending` في `labels.ts`. */
+  refundedAt: string | null;
   nItems: number;
 };
 
@@ -95,6 +97,7 @@ export async function fetchFinanceReturns(q: {
       refundAmount: num(x.refund_amount),
       feesRefunded: num(x.fees_refunded),
       executedAt: String(x.executed_at),
+      refundedAt: (x.refunded_at as string | null) ?? null,
       nItems: num(x.n_items),
     })),
     total: num(r.total),
@@ -113,9 +116,14 @@ export type FinanceStats = {
   nSales: number;
   salesValue: number;
   feesTotal: number;
+  /** اشتراكات المشترين (فردي + شركة) بس. */
   subscriptions: number;
+  /** الاشتراك الثابت من البائعين — منفصل عن عمولتهم. */
+  sellerSubscriptions: number;
   commission: number;
   grossProfit: number;
+  /** مجموع أرصدة محافظ المشترين — مش دخل للمنصة، فلوس عملاء قابلة للشراء. */
+  buyersBalance: number;
   nReturns: number;
   returnsValue: number;
   feesRefunded: number;
@@ -143,8 +151,10 @@ export async function fetchFinanceStats(
     salesValue: num(r.sales_value),
     feesTotal: num(r.fees_total),
     subscriptions: num(r.subscriptions),
+    sellerSubscriptions: num(r.seller_subscriptions),
     commission: num(r.commission),
     grossProfit: num(r.gross_profit),
+    buyersBalance: num(r.buyers_balance),
     nReturns: num(r.n_returns),
     returnsValue: num(r.returns_value),
     feesRefunded: num(r.fees_refunded),

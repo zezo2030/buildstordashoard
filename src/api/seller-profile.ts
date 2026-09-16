@@ -4,6 +4,9 @@
 // الأعمدة كلها على `companies` ما عدا التخصصات (`seller_specialties`) والمواقع
 // (`sites`) — دول جدولين منفصلين لأن كل واحد صفوف متعددة لنفس الشركة.
 import { supabase, arError } from '../lib/supabase';
+import type { Database } from '../types/database';
+
+type PaymentMethod = Database['public']['Enums']['payment_method'];
 
 export type SellerLocation = {
   id?: string;
@@ -20,7 +23,8 @@ export type SellerProfile = {
   logoUrl: string;
   aboutAr: string;
   phones: string[];
-  paymentMethods: string[];
+  /** قيم enum `payment_method` — العمود بقى نوعه الحقيقي، فالنص الحر مابيعديش. */
+  paymentMethods: PaymentMethod[];
   specialtyIds: string[];
   shopNumber: string;
   contractNumber: string;
@@ -43,7 +47,7 @@ export const emptySellerProfile = (): SellerProfile => ({
 });
 
 /** طرق الدفع المتاحة — نفس قيم enum payment_method في الداتابيز. */
-export const PAYMENT_METHODS: { value: string; label: string }[] = [
+export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'knet', label: 'كي نت' },
   { value: 'credit_card', label: 'بطاقة ائتمان' },
   { value: 'apple_pay', label: 'Apple Pay' },

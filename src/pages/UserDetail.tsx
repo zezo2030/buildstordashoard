@@ -223,7 +223,17 @@ export default function UserDetail() {
       </div>
 
       {(p.role === 'individual_buyer' || p.role === 'company_buyer') && (
-        <BuyerStatsPanel profileId={p.id} />
+        <>
+          <div className="mt-4">
+            {/* `subscribed_until` عمود جديد وأنواع `database.ts` المولّدة لسه
+                ما اتجدّدتش — التأكيد هنا لحد ما تتولّد من جديد. */}
+            <SubscriptionCard
+              profileId={p.id}
+              until={(p as { subscribed_until?: string | null }).subscribed_until ?? null}
+            />
+          </div>
+          <BuyerStatsPanel profileId={p.id} selfName={p.full_name} />
+        </>
       )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -457,5 +467,66 @@ function PasswordModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * اشتراك المشتري.
+ *
+ * السعر والمدة إعدادات منصة واحدة للكل (صفحة الإعدادات) — الكارت ده بيعرض
+ * **تاريخ** الحساب ده بس، وبيسمح بمدّه يدويًا للمسامحة أو تسوية. مفيش سعر خاص
+ * بحساب: ده اللي بيخلي تغيير السعر مرة واحدة يسري على الكل.
+ */
+function SubscriptionCard({ profileId, until }: { profileId: string; until: string | null }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [draft, setDraft] = useState('');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const active = !!until && until >= today;
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!draft) throw new Error('اختر تاريخًا');
+      const { error } = await supabase.rpc('admin_set_subscription' as never, {
+        p_profile_id: profileId, p_until: draft, p_note: 'تعديل يدوي من اللوحة',
+      } as never);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم تحديث الاشتراك');
+      setDraft('');
+      qc.invalidateQueries({ queryKey: ['user', profileId] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-bold">الاشتراك</h2>
+        {active
+          ? <StatusChip label="سارٍ" tone="green" />
+          : <StatusChip label={until ? 'منتهي' : 'لم يشترك'} tone="red" />}
+      </div>
+
+      <div className="mb-3 flex justify-between gap-2 text-sm">
+        <span className="text-subtext">مشترك لغاية</span>
+        <span dir="ltr">{until ? fmtDate(until) : '—'}</span>
+      </div>
+
+      {/* مدّ التاريخ مش تحصيل: مابيدخلش في دخل المنصة ومابيخصمش من المحفظة.
+          التحصيل بيحصل لما العميل يدفع من التطبيق. */}
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="مدّ الاشتراك لغاية">
+          <Input type="date" value={draft} min={today} onChange={(e) => setDraft(e.target.value)} />
+        </Field>
+        <Btn onClick={() => save.mutate()} busy={save.isPending} disabled={!draft}>حفظ</Btn>
+      </div>
+      <p className="mt-2 text-xs text-subtext">
+        مدّ يدوي للمسامحة — مش تحصيل، فمابيظهرش في «دخل المنصة».
+        السعر والمدة لكل العملاء من صفحة الإعدادات.
+      </p>
+    </Card>
   );
 }

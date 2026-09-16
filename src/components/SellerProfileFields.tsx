@@ -147,7 +147,10 @@ export function SellerProfileFields({ value, onChange }: {
         </div>
       </Field>
 
-      <Field label="طرق الدفع المعتمدة لديه">
+      <Field
+        label="طرق الدفع المعتمدة لديه"
+        hint="سيبها فاضية = كل الطرق مقبولة. أول ما تختار حاجة، المشتري مش هيقدر يطلب من البائع ده بغيرها."
+      >
         <div className="grid grid-cols-2 gap-1 rounded-lg border border-line p-2">
           {PAYMENT_METHODS.map((m) => {
             const on = value.paymentMethods.includes(m.value);

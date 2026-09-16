@@ -8,7 +8,10 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { ImagePlus, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
-import { fetchProducts, OFFERS_FILTERS, type OffersFilter, type ProductRow } from '../api/products';
+import {
+  ACTIVE_FILTERS, fetchProducts, OFFERS_FILTERS,
+  type ActiveFilter, type OffersFilter, type ProductRow,
+} from '../api/products';
 import { uploadProductImage } from '../lib/product-image';
 import { skuFromSourceCode } from '../lib/catalog-sku';
 import { PageHeader, Btn, Field, Input, Select, Toggle, StatusChip, Money } from '../components/ui';
@@ -47,6 +50,7 @@ export default function Products() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [specialty, setSpecialty] = useState('all');
   const [offers, setOffers] = useState<OffersFilter>('all');
+  const [active, setActive] = useState<ActiveFilter>('all');
   const [editing, setEditing] = useState<ProductRow | 'new' | null>(null);
   const [offersFor, setOffersFor] = useState<ProductRow | null>(null);
   const [importing, setImporting] = useState(false);
@@ -60,9 +64,9 @@ export default function Products() {
   }, [search, debouncedSearch]);
 
   const list = useQuery({
-    queryKey: ['products', debouncedSearch, specialty, offers, page],
+    queryKey: ['products', debouncedSearch, specialty, offers, active, page],
     queryFn: () => fetchProducts({
-      search: debouncedSearch, specialty, offers, page, pageSize: PAGE_SIZE,
+      search: debouncedSearch, specialty, offers, active, page, pageSize: PAGE_SIZE,
     }),
     placeholderData: keepPreviousData,
   });
@@ -173,6 +177,19 @@ export default function Products() {
             >
               {OFFERS_FILTERS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </Select>
+            {/* المنتج الموقوف بيختفي من «التخصصات والفئات» (استعلامها بيجيب
+                النشط بس)، والصفحة دي هي المكان الوحيد اللي بيرجّعه منها.
+                من غير الفلتر ده الأدمن اللي نسي الاسم أو الـSKU كان لازم
+                يقلّب الصفحات كلها. */}
+            <Select
+              value={active}
+              onChange={(e) => { setActive(e.target.value as ActiveFilter); setPage(0); }}
+              className="w-36"
+            >
+              {ACTIVE_FILTERS.map((a) => (
+                <option key={a.value} value={a.value}>{a.label}</option>
               ))}
             </Select>
             <Btn variant="ghost" onClick={() => setImporting(true)}>رفع Excel</Btn>

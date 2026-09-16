@@ -21,16 +21,18 @@ import {
   PageHeader, KpiCard, Card, Input, Select, Money, ErrorState, Btn, StatusChip,
 } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
-import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
+import { DateRangePicker, type DateRange } from '../components/DateRangePicker';
 import { ReturnDetailsModal } from '../components/ReturnDetailsModal';
 import { BillingCell } from './accounts/BillingCell';
 import { statusCell } from './accounts/columns';
 import { fmtDate, fmtDateTime, money } from '../lib/format';
 import { localPhone } from '../lib/format';
 import { downloadCsv } from '../lib/csv';
-import { returnStatusLabels, labelOf } from '../lib/labels';
+import { returnStatusLabels, labelOf, isRefundPending } from '../lib/labels';
+import { PlatformBalanceTab } from '../components/PlatformBalanceTab';
+import { SellerLedgerTab } from '../components/SellerLedgerTab';
 
-type Tab = 'individual' | 'company_buyer' | 'seller' | 'returns' | 'stats';
+type Tab = 'individual' | 'company_buyer' | 'seller' | 'returns' | 'stats' | 'balance' | 'ledger';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'individual', label: '١. المشتري الفردي' },
@@ -38,11 +40,17 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'seller', label: '٣. البائع' },
   { key: 'returns', label: '٤. المرتجعات' },
   { key: 'stats', label: '٥. الإحصائيات' },
+  { key: 'balance', label: '٦. رصيد المنصة' },
+  { key: 'ledger', label: '٧. حساب البائعين' },
 ];
 
 export default function Finance() {
   const [tab, setTab] = useState<Tab>('individual');
-  const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
+  // الافتراضي «كل الفترات» مش آخر 30 يوم: الأدمن بيفتح الصفحة عشان يشوف
+  // الصورة كاملة، والنافذة الضيقة كانت بتخبّي بيانات من غير ما تقول — ولازم
+  // يدوس زرار كل مرة عشان يشوف الباقي. الطرفان فاضيين = بدون حد،
+  // والـAPI بيحوّلهم null.
+  const [range, setRange] = useState<DateRange>({ from: '', to: '' });
 
   return (
     <div>
@@ -67,7 +75,11 @@ export default function Finance() {
         ))}
       </div>
 
-      {tab === 'returns' ? (
+      {tab === 'ledger' ? (
+        <SellerLedgerTab />
+      ) : tab === 'balance' ? (
+        <PlatformBalanceTab range={range} />
+      ) : tab === 'returns' ? (
         <ReturnsTab range={range} />
       ) : tab === 'stats' ? (
         <StatsTab range={range} />
@@ -151,7 +163,27 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
     },
     { key: 'from', header: 'من', render: (r) => (r.billingFrom ? fmtDate(r.billingFrom) : '—') },
     { key: 'to', header: 'إلى', render: (r) => (r.billingTo ? fmtDate(r.billingTo) : '—') },
-    { key: 'fees', header: 'الرسوم المحصّلة', render: (r) => <Money value={r.feesCollected} /> },
+    {
+      // العمود كان بيقرا رسوم الاشتراك بس، فالبائع اللي على نسبة كان بيطلع
+      // **صفر دايمًا** مهما باع. العمولة رقم محسوب على الطلب و**لسه ما اتحصّلش**
+      // فعليًا (مافيش قيد في `platform_fees` ولا خصم من محفظة البائع)، عشان كده
+      // بتتعرض متعلّمة «مستحقة» بدل ما تتحسب محصّلة.
+      key: 'fees',
+      header: 'الرسوم',
+      render: (r) => (r.billingKind === 'subscription' ? (
+        <div>
+          <Money value={r.feesCollected} />
+          {r.feesCollected === 0 && (
+            <div className="text-xs text-subtext">لسه ما اتحصّلش</div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <Money value={r.commission} />
+          <div className="text-xs text-danger">عمولة مستحقة</div>
+        </div>
+      )),
+    },
     {
       key: 'total',
       header: isSeller ? 'إجمالي المبيعات' : 'إجمالي المشتريات',
@@ -296,7 +328,12 @@ function ReturnsTab({ range }: { range: DateRange }) {
       header: 'حالة المرتجع',
       render: (r) => {
         const l = labelOf(returnStatusLabels, r.status);
-        return <StatusChip label={l.label} tone={l.tone} />;
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            <StatusChip label={l.label} tone={l.tone} />
+            {isRefundPending(r.status, r.refundedAt) && <StatusChip label="لسه ما اتردّش" tone="red" />}
+          </div>
+        );
       },
     },
     { key: 'at', header: 'تاريخ التنفيذ', render: (r) => <span className="text-xs">{fmtDateTime(r.executedAt)}</span> },
@@ -332,7 +369,9 @@ function ReturnsTab({ range }: { range: DateRange }) {
               rows.map((r) => [
                 r.returnNumber, r.orderNumber ?? '', r.buyerName ?? '', r.sellerName ?? '',
                 r.nItems, money(r.refundAmount), money(r.feesRefunded),
-                labelOf(returnStatusLabels, r.status).label, fmtDateTime(r.executedAt),
+                labelOf(returnStatusLabels, r.status).label
+                  + (isRefundPending(r.status, r.refundedAt) ? ' — لسه ما اتردّش' : ''),
+                fmtDateTime(r.executedAt),
               ]),
             )
           }
@@ -410,20 +449,58 @@ function StatsTab({ range }: { range: DateRange }) {
         <h2 className="mb-3 text-sm font-bold text-primary">دخل المنصة</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard title="٥ · إجمالي قيمة المبيعات" value={m(d?.salesValue)} icon={<TrendingUp size={20} />} tone="orange" />
-          <KpiCard title="٦ · إجمالي الرسوم والعمولات" value={m(d?.feesTotal)} icon={<CircleDollarSign size={20} />} tone="green" />
-          <KpiCard title="٧ · إجمالي قيمة الاشتراكات" value={m(d?.subscriptions)} icon={<CalendarClock size={20} />} tone="navy" />
-          <KpiCard title="٨ · إجمالي الأرباح الفعلية" value={m(d?.grossProfit)} icon={<PiggyBank size={20} />} tone="blue" />
+          {/* الرسوم كانت رقمين ملمومين: «الرسوم والعمولات» بيجمع كل حاجة،
+              و«الاشتراكات» بتخلط اشتراك المشتري باشتراك البائع. دلوقتي كل
+              مصدر لوحده، والإجمالي فوقهم — التلاتة بيجمعوا الإجمالي بالظبط. */}
+          <KpiCard
+            title="٦ · إجمالي الرسوم والعمولات"
+            value={m(d?.feesTotal)}
+            hint="عمولة البائعين + اشتراكاتهم + اشتراكات المشترين"
+            icon={<CircleDollarSign size={20} />}
+            tone="green"
+          />
+          <KpiCard
+            title="٧ · عمولة البائعين"
+            value={m(d?.commission)}
+            hint="نسبة من كل بيعة"
+            icon={<CircleDollarSign size={20} />}
+            tone="orange"
+          />
+          <KpiCard
+            title="٨ · اشتراكات البائعين"
+            value={m(d?.sellerSubscriptions)}
+            hint="الاشتراك الثابت"
+            icon={<CalendarClock size={20} />}
+            tone="navy"
+          />
+          <KpiCard
+            title="٩ · اشتراكات المشترين"
+            value={m(d?.subscriptions)}
+            hint="فردي + شركة"
+            icon={<CalendarClock size={20} />}
+            tone="blue"
+          />
+          <KpiCard title="١٠ · إجمالي الأرباح الفعلية" value={m(d?.grossProfit)} icon={<PiggyBank size={20} />} tone="blue" />
+          {/* رصيد المشترين مش دخل — فلوس عملاء في محافظهم يقدروا يشتروا بيها
+              في أي وقت. معروض عشان تبقى معروفة، وما بيدخلش في أي مجموع أرباح. */}
+          <KpiCard
+            title="١١ · رصيد المشترين"
+            value={m(d?.buyersBalance)}
+            hint="للعرض — فلوس العملاء مش دخل للمنصة"
+            icon={<Wallet size={20} />}
+            tone="gray"
+          />
         </div>
       </section>
 
       <section>
         <h2 className="mb-3 text-sm font-bold text-primary">المرتجعات وصافي الربح</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="٩ · إجمالي عدد المرتجعات" value={n(d?.nReturns)} icon={<Undo2 size={20} />} tone="navy" />
-          <KpiCard title="١٠ · إجمالي قيمة المرتجعات" value={m(d?.returnsValue)} icon={<Wallet size={20} />} tone="orange" />
-          <KpiCard title="١١ · الرسوم المعادة للبائعين" value={m(d?.feesRefunded)} icon={<Undo2 size={20} />} tone="red" />
+          <KpiCard title="١٢ · إجمالي عدد المرتجعات" value={n(d?.nReturns)} icon={<Undo2 size={20} />} tone="navy" />
+          <KpiCard title="١٣ · إجمالي قيمة المرتجعات" value={m(d?.returnsValue)} icon={<Wallet size={20} />} tone="orange" />
+          <KpiCard title="١٤ · الرسوم المعادة للبائعين" value={m(d?.feesRefunded)} icon={<Undo2 size={20} />} tone="red" />
           <KpiCard
-            title="١٢ · صافي الأرباح بعد الاسترداد"
+            title="١٥ · صافي الأرباح بعد الاسترداد"
             value={m(d?.netProfit)}
             hint="الرسوم والعمولات ناقص الرسوم المعادة"
             icon={<PiggyBank size={20} />}
@@ -436,15 +513,15 @@ function StatsTab({ range }: { range: DateRange }) {
         <h2 className="mb-3 text-sm font-bold text-primary">الحالة العامة</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard
-            title="١٣ · الحسابات النشطة وغير النشطة"
+            title="١٦ · الحسابات النشطة وغير النشطة"
             value={d ? `${d.accountsActive} / ${d.accountsInactive}` : '…'}
             hint="نشط / غير نشط"
             icon={<Users size={20} />}
             tone="blue"
           />
-          <KpiCard title="١٤ · الطلبات المكتملة" value={n(d?.ordersCompleted)} icon={<PackageCheck size={20} />} tone="green" />
-          <KpiCard title="١٤ · الطلبات الملغاة" value={n(d?.ordersCancelled)} icon={<XCircle size={20} />} tone="gray" />
-          <KpiCard title="١٤ · الطلبات المرتجعة" value={n(d?.ordersReturned)} icon={<Undo2 size={20} />} tone="red" />
+          <KpiCard title="١٧ · الطلبات المكتملة" value={n(d?.ordersCompleted)} icon={<PackageCheck size={20} />} tone="green" />
+          <KpiCard title="١٨ · الطلبات الملغاة" value={n(d?.ordersCancelled)} icon={<XCircle size={20} />} tone="gray" />
+          <KpiCard title="١٩ · الطلبات المرتجعة" value={n(d?.ordersReturned)} icon={<Undo2 size={20} />} tone="red" />
         </div>
       </section>
     </div>

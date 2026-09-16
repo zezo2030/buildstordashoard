@@ -51,12 +51,12 @@ export async function fetchOverviewCounts(): Promise<OverviewCounts> {
 }
 
 export async function fetchSalesRange(from: string | null, to: string | null): Promise<SalesRange> {
-  const r = await callRpc<Record<string, unknown>>('admin_sales_range', { p_from: from, p_to: to });
+  const r = await callRpc<Record<string, unknown>>('admin_sales_range', { p_from: from || null, p_to: to || null });
   return { n: num(r.n), total: num(r.total), commission: num(r.commission) };
 }
 
 export async function fetchSalesSeries(from: string, to: string): Promise<SalesSeries> {
-  const r = await callRpc<Record<string, unknown>>('admin_sales_series', { p_from: from, p_to: to });
+  const r = await callRpc<Record<string, unknown>>('admin_sales_series', { p_from: from || null, p_to: to || null });
   const points = (r.points ?? []) as Record<string, unknown>[];
   return {
     bucket: r.bucket === 'month' ? 'month' : 'day',
@@ -69,8 +69,8 @@ export async function fetchSalesBySpecialty(
   to: string | null,
 ): Promise<SpecialtySales[]> {
   const rows = await callRpc<Record<string, unknown>[]>('admin_sales_by_specialty', {
-    p_from: from,
-    p_to: to,
+    p_from: from || null,
+    p_to: to || null,
   });
   return (rows ?? []).map((r) => ({
     specialtyId: (r.specialty_id as string | null) ?? null,

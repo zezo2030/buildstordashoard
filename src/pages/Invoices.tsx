@@ -4,24 +4,33 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Package, MapPin, ShoppingCart, Wallet, Users, Store } from 'lucide-react';
-import { fetchInvoices, fetchInvoicesStats, type InvoiceRow, type InvoiceSortKey } from '../api/invoices';
-import { PageHeader, KpiCard, Input, Money, Card, ErrorState } from '../components/ui';
+import {
+  INVOICE_STATUS_FILTERS, fetchInvoices, fetchInvoicesStats,
+  type InvoiceRow, type InvoiceSortKey, type InvoiceStatusFilter,
+} from '../api/invoices';
+import { PageHeader, KpiCard, Input, Money, Card, ErrorState, Select, StatusChip } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
-import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
+import { DateRangePicker, type DateRange } from '../components/DateRangePicker';
 import { LocationCell } from '../components/LocationCell';
 import { fmtDateTime, qty } from '../lib/format';
+import { paymentMethodLabels, labelOf } from '../lib/labels';
 
 type SearchFields = { invoice: string; seller: string; buyer: string };
 
 export default function Invoices() {
   const navigate = useNavigate();
-  const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
+  // الافتراضي «كل الفترات» مش آخر 30 يوم: الأدمن بيفتح الصفحة عشان يشوف
+  // الصورة كاملة، والنافذة الضيقة كانت بتخبّي بيانات من غير ما تقول — ولازم
+  // يدوس زرار كل مرة عشان يشوف الباقي. الطرفان فاضيين = بدون حد،
+  // والـAPI بيحوّلهم null.
+  const [range, setRange] = useState<DateRange>({ from: '', to: '' });
   const [search, setSearch] = useState<SearchFields>({ invoice: '', seller: '', buyer: '' });
   const [debounced, setDebounced] = useState<SearchFields>(search);
   const [sort, setSort] = useState<InvoiceSortKey>('issued_at');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
-  const [showCancelled, setShowCancelled] = useState(false);
+  const [status, setStatus] = useState<InvoiceStatusFilter>('all');
+  const [method, setMethod] = useState('all');
 
   useEffect(() => {
     if (
@@ -34,12 +43,12 @@ export default function Invoices() {
   }, [search, debounced]);
 
   const stats = useQuery({
-    queryKey: ['invoices-stats', range.from, range.to, showCancelled],
-    queryFn: () => fetchInvoicesStats(range.from, range.to, showCancelled),
+    queryKey: ['invoices-stats', range.from, range.to, status, method],
+    queryFn: () => fetchInvoicesStats(range.from, range.to, status, method),
   });
 
   const list = useQuery({
-    queryKey: ['invoices', range.from, range.to, debounced, sort, dir, page, showCancelled],
+    queryKey: ['invoices', range.from, range.to, debounced, sort, dir, page, status, method],
     queryFn: () => fetchInvoices({
       from: range.from,
       to: range.to,
@@ -50,7 +59,8 @@ export default function Invoices() {
       dir,
       page,
       pageSize: PAGE_SIZE,
-      includeCancelled: showCancelled,
+      status,
+      method,
     }),
     placeholderData: keepPreviousData,
   });
@@ -76,6 +86,16 @@ export default function Invoices() {
     { key: 'buyer', header: 'المشتري', sortKey: 'buyer_name', render: (r) => r.buyerName ?? '—' },
     { key: 'location', header: 'الموقع', render: (r) => <LocationCell loc={r.location} /> },
     { key: 'total', header: 'الإجمالي', sortKey: 'total', render: (r) => <Money value={r.total} /> },
+    // طريقة الدفع والحالة جنب بعض: الفلتر من غير عمود بيخلي الأدمن يفلتر
+    // ومايشوفش على إيه فلتر.
+    { key: 'method', header: 'طريقة الدفع',
+      render: (r) => (r.paymentMethod ? labelOf(paymentMethodLabels, r.paymentMethod).label : '—') },
+    { key: 'paid', header: 'الحالة',
+      render: (r) => (r.orderCancelled
+        ? <StatusChip label="ملغية" tone="red" />
+        : r.paymentStatus === 'paid'
+          ? <StatusChip label="مدفوعة" tone="green" />
+          : <StatusChip label="غير مدفوعة" tone="orange" />) },
     { key: 'issued', header: 'تاريخ الإصدار', sortKey: 'issued_at',
       render: (r) => <span className="text-xs">{fmtDateTime(r.issuedAt)}</span> },
   ];
@@ -133,20 +153,25 @@ export default function Invoices() {
           className="w-44"
         />
         <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />
-        {/* الطلب الملغي/المرفوض مش بيتعرض هنا افتراضيًا — الفاتورة محفوظة في
-            القاعدة لكن مالهاش لازمة في مراجعة الفواتير اليومية. */}
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-subtext">
-          <input
-            type="checkbox"
-            className="size-4 accent-accent"
-            checked={showCancelled}
-            onChange={(e) => { setShowCancelled(e.target.checked); setPage(0); }}
-          />
-          إظهار فواتير الطلبات الملغية
-          {s && s.nCancelled > 0 && !showCancelled && (
-            <span className="rounded-full bg-surface px-1.5 py-0.5 tabular-nums">{s.nCancelled}</span>
-          )}
-        </label>
+        <Select
+          value={status}
+          onChange={(e) => { setStatus(e.target.value as InvoiceStatusFilter); setPage(0); }}
+          className="w-36"
+        >
+          {INVOICE_STATUS_FILTERS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </Select>
+        <Select
+          value={method}
+          onChange={(e) => { setMethod(e.target.value); setPage(0); }}
+          className="w-40"
+        >
+          <option value="all">كل طرق الدفع</option>
+          {Object.entries(paymentMethodLabels).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </Select>
         <button
           type="button"
           onClick={() => { setRange({ from: '', to: '' }); setPage(0); }}

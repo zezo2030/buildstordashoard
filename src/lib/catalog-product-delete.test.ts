@@ -14,13 +14,13 @@ describe('catalogProductDeleteBlockReason', () => {
   it('blocks delete when seller offers exist', () => {
     expect(
       catalogProductDeleteBlockReason({ sellerOfferCount: 1, quotationItemCount: 0 }),
-    ).toMatch(/عروض|مقايسات/);
+    ).toMatch(/عروض|مقارنات/);
   });
 
   it('blocks delete when quotation items exist', () => {
     expect(
       catalogProductDeleteBlockReason({ sellerOfferCount: 0, quotationItemCount: 2 }),
-    ).toMatch(/عروض|مقايسات/);
+    ).toMatch(/عروض|مقارنات/);
   });
 });
 
@@ -59,7 +59,7 @@ describe('deleteCatalogProduct', () => {
         },
         'prod-2',
       ),
-    ).rejects.toThrow(/عروض|مقايسات/);
+    ).rejects.toThrow(/عروض|مقارنات/);
     expect(deleted).toBe(false);
   });
 });

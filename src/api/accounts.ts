@@ -3,7 +3,11 @@
 import { supabase, arError } from '../lib/supabase';
 
 export type AccountKind = 'individual' | 'company_buyer' | 'seller';
-export type AccountStatus = 'active' | 'suspended';
+/**
+ * `deleted` = حذف ناعم: الصف موجود بكل بياناته بس مخفي والدخول متمنوع.
+ * بيظهر في الفلتر لوحده — مش داخل `all` — وبيترجّع بـ`restoreAccount`.
+ */
+export type AccountStatus = 'active' | 'suspended' | 'deleted';
 
 export type SortKey =
   | 'name' | 'account_code' | 'status' | 'phone' | 'created_at' | 'sub_accounts'
@@ -91,7 +95,7 @@ function toRow(r: Record<string, unknown>): AccountRow {
     accountCode: (r.account_code as string | null) ?? null,
     email: (r.email as string | null) ?? null,
     phone: (r.phone as string | null) ?? null,
-    status: r.status === 'suspended' ? 'suspended' : 'active',
+    status: r.status === 'deleted' ? 'deleted' : r.status === 'suspended' ? 'suspended' : 'active',
     suspendedAt: (r.suspended_at as string | null) ?? null,
     suspendReason: (r.suspend_reason as string | null) ?? null,
     createdAt: String(r.created_at),
@@ -116,8 +120,12 @@ function toRow(r: Record<string, unknown>): AccountRow {
 export async function fetchAccounts(q: AccountsQuery): Promise<{ rows: AccountRow[]; total: number }> {
   const r = await callRpc<Record<string, unknown>>('admin_accounts_list', {
     p_kind: q.kind,
-    p_from: q.from,
-    p_to: q.to,
+    // خانة التاريخ الفاضية بترجع '' — لازم تتحول null (يعني «من غير حد»)
+    // قبل ما توصل للداتابيز، وإلا Postgres بيرفض '' كتاريخ وبيكسر الصفحة
+    // برسالة `invalid input syntax for type date: ""`. زرار «كل الفترات»
+    // بيفضّي الطرفين، فده مسار عادي مش حالة نادرة.
+    p_from: q.from || null,
+    p_to: q.to || null,
     p_search: q.search.trim() || null,
     p_status: q.status,
     p_sort: q.sort,
@@ -136,8 +144,8 @@ export async function fetchAccountsStats(
 ): Promise<AccountsStats> {
   const r = await callRpc<Record<string, unknown>>('admin_accounts_stats', {
     p_kind: kind,
-    p_from: from,
-    p_to: to,
+    p_from: from || null,
+    p_to: to || null,
   });
   return {
     total: num(r.total),
@@ -158,6 +166,15 @@ export async function suspendAccount(kind: AccountKind, id: string, reason: stri
     await callRpc('admin_suspend_company', { p_company_id: id, p_reason: reason.trim() });
   } else {
     await callRpc('admin_suspend_account', { p_profile_id: id, p_reason: reason.trim() });
+  }
+}
+
+/** استرجاع حساب محذوف — بيفكّ الحذف الناعم ويرجّعه نشط. */
+export async function restoreAccount(kind: AccountKind, id: string): Promise<void> {
+  if (kind === 'seller') {
+    await callRpc('admin_restore_company', { p_company_id: id });
+  } else {
+    await callRpc('admin_restore_account', { p_profile_id: id });
   }
 }
 

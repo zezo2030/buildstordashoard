@@ -40,3 +40,21 @@ export async function fetchExpiringPlans(days = 30): Promise<ExpiringPlan[]> {
     suspended: r.suspended === true,
   }));
 }
+
+/**
+ * تذكير تجديد يدوي لحساب واحد.
+ *
+ * فيه تذكير تلقائي شغّال كل يوم، بس بيضرب مرة واحدة بالظبط قبل الانتهاء بعدد
+ * الأيام اللي في الإعدادات. ده للأدمن لما يعوز يذكّر دلوقتي حالًا.
+ *
+ * بيرجّع عدد المستخدمين اللي وصلهم الإشعار — البائع = كل أعضاء الشركة النشطين،
+ * فشركة من غير أعضاء بترمي خطأ بدل ما تقول «تمام» وما يوصلش حد.
+ */
+export async function notifyPlanExpiry(p: ExpiringPlan): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_notify_plan_expiry' as never, {
+    p_subject_type: p.subject,
+    p_subject_id: p.id,
+  } as never);
+  if (error) throw new Error(arError(error));
+  return Number(data ?? 0);
+}

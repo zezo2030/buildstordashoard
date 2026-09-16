@@ -14,7 +14,26 @@ export type InvoiceRow = {
   location: Loc | null;
   total: number;
   issuedAt: string;
+  paymentMethod: string | null;
+  /** `paid` أو `pending` — الفاتورة بتتصدر عند تأكيد الطلب، والدفع عند الاستلام بعدها. */
+  paymentStatus: string | null;
+  orderCancelled: boolean;
 };
+
+/**
+ * حالة الفاتورة في الفلتر.
+ *
+ * `unpaid` مش حالة زيادة للزينة: الفاتورة بتتصدر عند **تأكيد** الطلب، والدفع
+ * عند الاستلام بيتحصّل بعدها — فلو مافيش تفرقة، الفواتير المستحقة بتتحسب مدفوعة.
+ */
+export type InvoiceStatusFilter = 'all' | 'paid' | 'unpaid' | 'cancelled';
+
+export const INVOICE_STATUS_FILTERS: { value: InvoiceStatusFilter; label: string }[] = [
+  { value: 'all', label: 'كل الحالات' },
+  { value: 'paid', label: 'مدفوعة' },
+  { value: 'unpaid', label: 'غير مدفوعة' },
+  { value: 'cancelled', label: 'ملغية' },
+];
 
 export type InvoicesStats = {
   nItems: number;
@@ -37,8 +56,9 @@ export type InvoicesQuery = {
   dir: 'asc' | 'desc';
   page: number;
   pageSize: number;
-  /** فواتير الطلبات الملغية مخفية افتراضيًا — الطلب الملغي مالوش لازمة هنا. */
-  includeCancelled: boolean;
+  status: InvoiceStatusFilter;
+  /** مفتاح `payment_method` زي ما هو في القاعدة، أو `all`. */
+  method: string;
 };
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -54,7 +74,8 @@ export async function fetchInvoices(q: InvoicesQuery): Promise<{ rows: InvoiceRo
     p_dir: q.dir,
     p_limit: q.pageSize,
     p_offset: q.page * q.pageSize,
-    p_include_cancelled: q.includeCancelled,
+    p_status: q.status,
+    p_method: q.method,
   } as never);
   if (error) throw new Error(arError(error));
   const r = data as unknown as { rows?: Record<string, unknown>[]; total?: unknown };
@@ -69,6 +90,9 @@ export async function fetchInvoices(q: InvoicesQuery): Promise<{ rows: InvoiceRo
       location: toLoc(x.location),
       total: num(x.total),
       issuedAt: String(x.issued_at),
+      paymentMethod: (x.payment_method as string | null) ?? null,
+      paymentStatus: (x.payment_status as string | null) ?? null,
+      orderCancelled: x.order_cancelled === true,
     })),
     total: num(r.total),
   };
@@ -77,10 +101,11 @@ export async function fetchInvoices(q: InvoicesQuery): Promise<{ rows: InvoiceRo
 export async function fetchInvoicesStats(
   from: string | null,
   to: string | null,
-  includeCancelled = false,
+  status: InvoiceStatusFilter = 'all',
+  method = 'all',
 ): Promise<InvoicesStats> {
   const { data, error } = await supabase.rpc('admin_invoices_stats' as never, {
-    p_from: from || null, p_to: to || null, p_include_cancelled: includeCancelled,
+    p_from: from || null, p_to: to || null, p_status: status, p_method: method,
   } as never);
   if (error) throw new Error(arError(error));
   const r = data as unknown as Record<string, unknown>;

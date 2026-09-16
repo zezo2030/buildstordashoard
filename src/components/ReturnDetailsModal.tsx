@@ -1,5 +1,5 @@
 // تفاصيل سند المرتجع: البنود والقيم والمسار والمستندات — ومعاها قرار البائع
-// وتعليم الاستلام لما الشاشة تكون شاشة تشغيل مش شاشة قراءة.
+// لما الشاشة تكون شاشة تشغيل مش شاشة قراءة.
 //
 // اتشال من `pages/Returns.tsx` لما تاب المرتجعات في «المال» احتاج يفتح نفس
 // التفاصيل. صفحة المرتجعات بتستخدمه بإجراءات، وتاب المال بيستخدمه `readOnly`
@@ -9,13 +9,13 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileText, Paperclip } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
-import { decideReturn, receiveReturn, type ReturnDecision } from '../api/returns';
+import { decideReturn, type ReturnDecision } from '../api/returns';
 import type { Loc } from '../api/location';
 import { Btn, ErrorState, Input, Money, StatusChip, Textarea } from './ui';
 import { LocationCell } from './LocationCell';
 import { Modal } from './Modal';
 import { fmtDateTime, qty } from '../lib/format';
-import { returnStatusLabels, refundMethodLabels, returnDocLabels, labelOf } from '../lib/labels';
+import { returnStatusLabels, refundMethodLabels, returnDocLabels, labelOf, isRefundPending } from '../lib/labels';
 
 /** أقل ما الشاشة محتاجاه عن المرتجع — الباقي بيتجاب بمعرّف السند. */
 export type ReturnModalRow = {
@@ -79,10 +79,11 @@ function fileName(path: string) {
 }
 
 /**
- * قرار البائع على بنود السند + تعليم الاستلام.
+ * قرار البائع على بنود السند.
  *
  * القرار مابيقيّدش رصيد — القيد بيحصل في `receive_return` لما البضاعة توصل
- * فعلًا. من غير الفصل ده كان المشتري بياخد القيمة والمنتج لسه معاه.
+ * فعلًا، والبائع هو اللي بيعلّم الاستلام من تطبيقه. من غير الفصل ده كان
+ * المشتري بياخد القيمة والمنتج لسه معاه.
  */
 function DecisionPanel({ returnId, items, unitOf, onDone }: {
   returnId: string;
@@ -193,12 +194,11 @@ function DecisionPanel({ returnId, items, unitOf, onDone }: {
 
 export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
   row: ReturnModalRow;
-  /** شاشة قراءة: من غير قرار على البنود ولا زر استلام. */
+  /** شاشة قراءة: من غير قرار على البنود. */
   readOnly?: boolean;
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [actionErr, setActionErr] = useState<string | null>(null);
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ['return', row.id] });
@@ -206,13 +206,6 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
     void queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
     void queryClient.invalidateQueries({ queryKey: ['finance'] });
   };
-
-  const receive = useMutation({
-    mutationFn: () => receiveReturn(row.id),
-    onMutate: () => setActionErr(null),
-    onSuccess: refresh,
-    onError: (e: Error) => setActionErr(e.message),
-  });
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['return', row.id],
@@ -257,6 +250,13 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
     <Modal title={`مرتجع ${row.returnNumber}`} open onClose={onClose} wide>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <StatusChip label={st.label} tone={st.tone} />
+        {/* الخط الزمني تحت بيقول إيه اللي حصل بالظبط — الشريحة دي عشان
+            «مقبول» ما تتقريش على إنها «خلصت والفلوس رجعت». */}
+        {/* `data` لسه بتتحمّل ⇒ ما نعرضش حاجة: `refunded_at` الفاضية وقت
+            التحميل هتقول «لسه ما اتردّش» على سند خلص فعلاً. */}
+        {data && isRefundPending(row.status, data.refunded_at) && (
+          <StatusChip label="لسه ما اتردّش" tone="red" />
+        )}
         {data?.refund_method && (() => {
           const rm = labelOf(refundMethodLabels, data.refund_method);
           return <StatusChip label={`الاسترداد: ${rm.label}`} tone={rm.tone} />;
@@ -362,27 +362,18 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
             />
           )}
 
-          {!readOnly && !!data?.seller_decided_at && !data?.refunded_at && Number(data.refund_amount ?? 0) > 0 && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/5 p-3">
-              <div className="text-sm">
-                <div className="font-bold">البضاعة وصلت؟</div>
-                <p className="text-xs text-subtext">
-                  بتعليم الاستلام بيتقيّد <Money value={data.refund_amount} /> في محفظة المشتري.
-                </p>
-              </div>
-              <Btn onClick={() => receive.mutate()} busy={receive.isPending}>
-                تم استلام المرتجع
-              </Btn>
-            </div>
-          )}
+          {/* «تم استلام المرتجع» اتشال من اللوحة: استلام البضاعة حاجة بتحصل
+              في مخزن البائع، والبائع بيعلّمها من تطبيقه
+              (`(seller)/returns/[id].tsx` بينده نفس `receive_return`). الأدمن
+              مش طرف في تسليم بضاعة ما شافهاش — ولما كان بيعلّمها من هنا كان
+              بيقيّد فلوس في محفظة المشتري نيابةً عن البائع. */}
 
           {readOnly && (
             <p className="mt-3 rounded-lg bg-surface p-2.5 text-xs text-subtext">
-              للقرار على البنود أو تعليم الاستلام افتح السند من صفحة «المرتجعات».
+              للقرار على البنود افتح السند من صفحة «المرتجعات».
             </p>
           )}
 
-          {actionErr && <p className="mt-2 text-sm text-danger">{actionErr}</p>}
 
           <dl className="mt-3 space-y-1.5 rounded-lg bg-surface px-3 py-2.5 text-sm">
             <div className="flex justify-between">

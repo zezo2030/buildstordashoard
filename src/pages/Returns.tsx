@@ -11,19 +11,18 @@ import {
   PageHeader, KpiCard, StatusChip, Select, Input, Money, Card, ErrorState,
 } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
-import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
+import { DateRangePicker, type DateRange } from '../components/DateRangePicker';
 import { LocationCell } from '../components/LocationCell';
 import { ReturnDetailsModal } from '../components/ReturnDetailsModal';
 import { fmtDateTime } from '../lib/format';
-import { returnStatusLabels, labelOf } from '../lib/labels';
-
-// الفلتر على الحالات اللي الأدمن بيتابعها فعلاً: اتقدّم، اتقبل، اترفض من مين.
-// باقي الحالات (استلام، رد مبلغ، مقبول جزئيًا…) لسه بتبان في عمود الحالة وتحت
-// «كل الحالات» — بس مالهاش خانة فلتر عشان القايمة ماتطولش من غير فايدة.
-const STATUS_FILTER = ['submitted', 'approved', 'rejected', 'cancelled'] as const;
+import { returnStatusLabels, labelOf, isRefundPending, RETURN_STATUS_FILTERS } from '../lib/labels';
 
 export default function Returns() {
-  const [range, setRange] = useState<DateRange>({ from: daysAgoISO(30), to: todayISO() });
+  // الافتراضي «كل الفترات» مش آخر 30 يوم: الأدمن بيفتح الصفحة عشان يشوف
+  // الصورة كاملة، والنافذة الضيقة كانت بتخبّي بيانات من غير ما تقول — ولازم
+  // يدوس زرار كل مرة عشان يشوف الباقي. الطرفان فاضيين = بدون حد،
+  // والـAPI بيحوّلهم null.
+  const [range, setRange] = useState<DateRange>({ from: '', to: '' });
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('all');
@@ -70,8 +69,19 @@ export default function Returns() {
     { key: 'buyer', header: 'المشتري', sortKey: 'buyer_name', render: (r) => r.buyerName ?? '—' },
     { key: 'seller', header: 'البائع', sortKey: 'seller_name', render: (r) => r.sellerName ?? '—' },
     { key: 'location', header: 'الموقع', render: (r) => <LocationCell loc={r.location} /> },
+    // شريحة «الفلوس لسه ما رجعتش» جنب الحالة: «مقبول» لوحدها بتضم السند اللي
+    // اتقبل من دقيقة والسند اللي خلص ورجعت فلوسه، والفرق بينهم فلوس مستحقة
+    // للعميل — لازم تبان في نفس الخانة اللي الأدمن بيقرا منها الحالة.
     { key: 'status', header: 'الحالة', sortKey: 'status',
-      render: (r) => { const l = labelOf(returnStatusLabels, r.status); return <StatusChip label={l.label} tone={l.tone} />; } },
+      render: (r) => {
+        const l = labelOf(returnStatusLabels, r.status);
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            <StatusChip label={l.label} tone={l.tone} />
+            {isRefundPending(r.status, r.refundedAt) && <StatusChip label="لسه ما اتردّش" tone="red" />}
+          </div>
+        );
+      } },
     { key: 'refund', header: 'المبلغ المسترد', sortKey: 'refund_amount',
       render: (r) => <Money value={r.refundAmount} /> },
     { key: 'at', header: 'التاريخ', sortKey: 'requested_at',
@@ -90,10 +100,16 @@ export default function Returns() {
           />
         </Card>
       ) : (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard title="إجمالي المسترد" value={s ? <Money value={s.refund} /> : '…'}
-            icon={<Wallet size={20} />} tone="orange"
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {/* «إجمالي المسترد» كان بيجمع اللي رجع واللي لسه مستحق في رقم واحد،
+              فمبلغ واجب على المنصة كان بيتعدّ كأنه اترد خلاص. الكارتين دول
+              بيفصلوهم: التاني هو الفلوس اللي لسه على المنصة للعملاء. */}
+          <KpiCard title="المسترد فعليًا" value={s ? <Money value={s.refunded} /> : '…'}
+            icon={<Wallet size={20} />} tone="green"
             footer={<DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />} />
+          <KpiCard title="مقبول ولسه ما اتردّش" value={s ? <Money value={s.pendingRefund} /> : '…'}
+            hint={s ? `${s.nPending} سند` : undefined}
+            icon={<Wallet size={20} />} tone="red" />
           <KpiCard title="عدد المرتجعات" value={s ? s.nReturns : '…'} icon={<Undo2 size={20} />} tone="navy" />
           <KpiCard title="عدد المواد المرتجعة" value={s ? s.nItems : '…'} icon={<Package size={20} />} tone="blue" />
           {/* الرسوم اللي المنصة رجّعتها للبائع على المواد المرتجعة — البائع
@@ -112,8 +128,8 @@ export default function Returns() {
         />
         <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
           <option value="all">كل الحالات</option>
-          {STATUS_FILTER.map((k) => (
-            <option key={k} value={k}>{labelOf(returnStatusLabels, k).label}</option>
+          {RETURN_STATUS_FILTERS.map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
           ))}
         </Select>
         <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />

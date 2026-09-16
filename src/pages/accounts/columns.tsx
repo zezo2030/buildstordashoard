@@ -10,7 +10,9 @@ export type ColumnActions = {
   onSuspend: (row: AccountRow) => void;
   onReactivate: (row: AccountRow) => void;
   onDelete: (row: AccountRow) => void;
+  onRestore: (row: AccountRow) => void;
   isReactivating?: (row: AccountRow) => boolean;
+  isRestoring?: (row: AccountRow) => boolean;
   renderCommission?: (row: AccountRow) => React.ReactNode;
 };
 
@@ -22,11 +24,16 @@ const n = (v: number) => <span dir="ltr" className="tabular-nums">{v}</span>;
  */
 export function statusCell(r: AccountRow) {
   if (r.status === 'active') return <StatusChip label="نشط" tone="green" />;
+  // المحذوف ليه شارة رمادية مش حمرا: الأحمر معناه «محتاج تصرّف»، والمحذوف
+  // حالة مستقرة — الأدمن هو اللي حطّه فيها، والسبب تحتها بيقول ليه.
+  const deleted = r.status === 'deleted';
   return (
     <div className="flex flex-col items-start gap-0.5">
-      <StatusChip label="موقوف" tone="red" />
+      <StatusChip label={deleted ? 'محذوف' : 'موقوف'} tone={deleted ? 'gray' : 'red'} />
       {r.suspendReason && (
-        <span className="block break-words text-[11px] text-danger">{r.suspendReason}</span>
+        <span className={`block break-words text-[11px] ${deleted ? 'text-subtext' : 'text-danger'}`}>
+          {r.suspendReason}
+        </span>
       )}
       {r.suspendedAt && (
         <span className="block text-[11px] text-subtext">{fmtDateTime(r.suspendedAt)}</span>
@@ -111,6 +118,19 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
     header: 'الإجراءات',
     render: (r) => (
       <div className="flex flex-col items-stretch gap-1" onClick={(e) => e.stopPropagation()}>
+        {/* المحذوف ماعندوش غير «استرجاع». تعليق حساب متقفل أصلاً، أو حذفه
+            تاني، أو تغيير كلمة مروره وهو ممنوع من الدخول — كلها بلا معنى. */}
+        {r.status === 'deleted' ? (
+          <button
+            type="button"
+            disabled={a.isRestoring?.(r)}
+            className="rounded-md border border-success/40 bg-white px-2 py-1 text-[11px] font-medium text-success hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => a.onRestore(r)}
+          >
+            استرجاع
+          </button>
+        ) : (
+          <>
         <button
           type="button"
           disabled={!r.ownerId}
@@ -145,6 +165,8 @@ export function buildColumns(kind: AccountKind, a: ColumnActions): Column<Accoun
         >
           حذف
         </button>
+          </>
+        )}
       </div>
     ),
   });

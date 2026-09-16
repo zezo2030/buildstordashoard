@@ -26,7 +26,12 @@ export default function SpecialtySalesCard() {
     <Card className="overflow-hidden p-5">
       <div className="mb-4">
         <h2 className="font-bold text-primary">المبيعات حسب التخصص</h2>
-        <p className="mt-0.5 text-xs text-subtext">حسب قيمة المبيعات</p>
+        {/* الفرق عن كارت «إجمالي المبيعات» فوق هو رسوم التوصيل: السطور هنا
+            بضاعة بس، والإجمالي بيشيل التوصيل كمان. مكتوب عشان الرقمين ما
+            يبانوش متعارضين. */}
+        <p className="mt-0.5 text-xs text-subtext">
+          قيمة البضاعة بعد الخصم — من غير رسوم التوصيل
+        </p>
         <DateRangePicker value={range} onChange={setRange} className="mt-2.5" />
       </div>
 

@@ -1,6 +1,3 @@
-// AUTO-GENERATED من سكيما Supabase — متعدّلش يدوي.
-// التحديث: npm run db:types  (بيتحقق منه CI عشان الأنواع ما تبعدش عن الداتابيز)
-
 export type Json =
   | string
   | number
@@ -432,7 +429,7 @@ export type Database = {
           logo_url: string | null
           name_ar: string
           name_en: string | null
-          payment_methods: string[]
+          payment_methods: Database["public"]["Enums"]["payment_method"][]
           phones: string[]
           rating: number
           ratings_count: number
@@ -473,7 +470,7 @@ export type Database = {
           logo_url?: string | null
           name_ar: string
           name_en?: string | null
-          payment_methods?: string[]
+          payment_methods?: Database["public"]["Enums"]["payment_method"][]
           phones?: string[]
           rating?: number
           ratings_count?: number
@@ -514,7 +511,7 @@ export type Database = {
           logo_url?: string | null
           name_ar?: string
           name_en?: string | null
-          payment_methods?: string[]
+          payment_methods?: Database["public"]["Enums"]["payment_method"][]
           phones?: string[]
           rating?: number
           ratings_count?: number
@@ -1576,12 +1573,14 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           delivery_fee: number
+          delivery_overdue_at: string | null
           discount_total: number
           grand_total: number
           id: string
           notes: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
@@ -1607,12 +1606,14 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           delivery_fee?: number
+          delivery_overdue_at?: string | null
           discount_total?: number
           grand_total?: number
           id?: string
           notes?: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee?: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
@@ -1638,12 +1639,14 @@ export type Database = {
           created_at?: string
           delivered_at?: string | null
           delivery_fee?: number
+          delivery_overdue_at?: string | null
           discount_total?: number
           grand_total?: number
           id?: string
           notes?: string | null
           order_group_id?: string
           order_number?: string
+          original_delivery_fee?: number | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
@@ -1714,6 +1717,7 @@ export type Database = {
           paid_at: string | null
           raw_response: Json | null
           status: Database["public"]["Enums"]["payment_status"]
+          subscription_profile_id: string | null
           updated_at: string
           user_id: string
           wallet_id: string | null
@@ -1730,6 +1734,7 @@ export type Database = {
           paid_at?: string | null
           raw_response?: Json | null
           status?: Database["public"]["Enums"]["payment_status"]
+          subscription_profile_id?: string | null
           updated_at?: string
           user_id: string
           wallet_id?: string | null
@@ -1746,6 +1751,7 @@ export type Database = {
           paid_at?: string | null
           raw_response?: Json | null
           status?: Database["public"]["Enums"]["payment_status"]
+          subscription_profile_id?: string | null
           updated_at?: string
           user_id?: string
           wallet_id?: string | null
@@ -1756,6 +1762,13 @@ export type Database = {
             columns: ["order_group_id"]
             isOneToOne: false
             referencedRelation: "order_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_profile_id_fkey"
+            columns: ["subscription_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -1837,6 +1850,44 @@ export type Database = {
             columns: ["return_id"]
             isOneToOne: false
             referencedRelation: "return_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_withdrawals: {
+        Row: {
+          amount: number
+          bank_ref: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          withdrawn_at: string
+        }
+        Insert: {
+          amount: number
+          bank_ref?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          withdrawn_at?: string
+        }
+        Update: {
+          amount?: number
+          bank_ref?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          withdrawn_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_withdrawals_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2261,6 +2312,7 @@ export type Database = {
           account_code: string | null
           account_seq: number
           avatar_url: string | null
+          can_change_price: boolean
           civil_id: string | null
           created_at: string
           deleted_at: string | null
@@ -2274,6 +2326,7 @@ export type Database = {
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           status: Database["public"]["Enums"]["account_status"]
+          subscribed_until: string | null
           subuser_account_code: string | null
           suspend_reason: string | null
           suspended_at: string | null
@@ -2285,6 +2338,7 @@ export type Database = {
           account_code?: string | null
           account_seq?: number
           avatar_url?: string | null
+          can_change_price?: boolean
           civil_id?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -2298,6 +2352,7 @@ export type Database = {
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["account_status"]
+          subscribed_until?: string | null
           subuser_account_code?: string | null
           suspend_reason?: string | null
           suspended_at?: string | null
@@ -2309,6 +2364,7 @@ export type Database = {
           account_code?: string | null
           account_seq?: number
           avatar_url?: string | null
+          can_change_price?: boolean
           civil_id?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -2322,6 +2378,7 @@ export type Database = {
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           status?: Database["public"]["Enums"]["account_status"]
+          subscribed_until?: string | null
           subuser_account_code?: string | null
           suspend_reason?: string | null
           suspended_at?: string | null
@@ -2676,8 +2733,10 @@ export type Database = {
       return_requests: {
         Row: {
           attachments: string[]
+          buyer_accepted: boolean | null
           buyer_company_id: string | null
           buyer_id: string
+          buyer_responded_at: string | null
           created_at: string
           id: string
           order_id: string
@@ -2700,8 +2759,10 @@ export type Database = {
         }
         Insert: {
           attachments?: string[]
+          buyer_accepted?: boolean | null
           buyer_company_id?: string | null
           buyer_id: string
+          buyer_responded_at?: string | null
           created_at?: string
           id?: string
           order_id: string
@@ -2724,8 +2785,10 @@ export type Database = {
         }
         Update: {
           attachments?: string[]
+          buyer_accepted?: boolean | null
           buyer_company_id?: string | null
           buyer_id?: string
+          buyer_responded_at?: string | null
           created_at?: string
           id?: string
           order_id?: string
@@ -2912,6 +2975,60 @@ export type Database = {
           },
         ]
       }
+      seller_ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          description_ar: string | null
+          entry_date: string
+          id: string
+          kind: string
+          ref_id: string | null
+          ref_type: string | null
+          seller_company_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          description_ar?: string | null
+          entry_date?: string
+          id?: string
+          kind: string
+          ref_id?: string | null
+          ref_type?: string | null
+          seller_company_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          description_ar?: string | null
+          entry_date?: string
+          id?: string
+          kind?: string
+          ref_id?: string | null
+          ref_type?: string | null
+          seller_company_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_ledger_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_ledger_seller_company_id_fkey"
+            columns: ["seller_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seller_product_price_history: {
         Row: {
           changed_at: string
@@ -2958,6 +3075,7 @@ export type Database = {
         Row: {
           compare_at_price: number | null
           created_at: string
+          deactivated_by_product_at: string | null
           id: string
           is_active: boolean
           lead_time_days: number | null
@@ -2974,6 +3092,7 @@ export type Database = {
         Insert: {
           compare_at_price?: number | null
           created_at?: string
+          deactivated_by_product_at?: string | null
           id?: string
           is_active?: boolean
           lead_time_days?: number | null
@@ -2990,6 +3109,7 @@ export type Database = {
         Update: {
           compare_at_price?: number | null
           created_at?: string
+          deactivated_by_product_at?: string | null
           id?: string
           is_active?: boolean
           lead_time_days?: number | null
@@ -3027,6 +3147,70 @@ export type Database = {
           },
         ]
       }
+      seller_renewal_requests: {
+        Row: {
+          admin_note: string | null
+          company_id: string
+          decided_at: string | null
+          decided_by: string | null
+          ends_on_at_request: string | null
+          id: string
+          new_ends_on: string | null
+          note: string | null
+          requested_at: string
+          requested_by: string | null
+          status: string
+        }
+        Insert: {
+          admin_note?: string | null
+          company_id: string
+          decided_at?: string | null
+          decided_by?: string | null
+          ends_on_at_request?: string | null
+          id?: string
+          new_ends_on?: string | null
+          note?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          status?: string
+        }
+        Update: {
+          admin_note?: string | null
+          company_id?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          ends_on_at_request?: string | null
+          id?: string
+          new_ends_on?: string | null
+          note?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_renewal_requests_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_renewal_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "seller_renewal_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seller_specialties: {
         Row: {
           company_id: string
@@ -3056,6 +3240,68 @@ export type Database = {
             columns: ["specialty_id"]
             isOneToOne: false
             referencedRelation: "specialties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seller_statements: {
+        Row: {
+          amount_due: number
+          charged: number
+          closed_at: string | null
+          closing: number
+          due_date: string
+          id: string
+          issued_at: string
+          note: string | null
+          notified_at: string | null
+          opening: number
+          period_end: string
+          period_start: string
+          seller_company_id: string
+          settled: number
+          status: string
+        }
+        Insert: {
+          amount_due?: number
+          charged?: number
+          closed_at?: string | null
+          closing?: number
+          due_date: string
+          id?: string
+          issued_at?: string
+          note?: string | null
+          notified_at?: string | null
+          opening?: number
+          period_end: string
+          period_start: string
+          seller_company_id: string
+          settled?: number
+          status?: string
+        }
+        Update: {
+          amount_due?: number
+          charged?: number
+          closed_at?: string | null
+          closing?: number
+          due_date?: string
+          id?: string
+          issued_at?: string
+          note?: string | null
+          notified_at?: string | null
+          opening?: number
+          period_end?: string
+          period_start?: string
+          seller_company_id?: string
+          settled?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "seller_statements_seller_company_id_fkey"
+            columns: ["seller_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -3831,6 +4077,15 @@ export type Database = {
         Args: { p_id: string; p_note?: string; p_status: string }
         Returns: undefined
       }
+      admin_decide_renewal: {
+        Args: {
+          p_approve: boolean
+          p_ends_on?: string
+          p_id: string
+          p_note?: string
+        }
+        Returns: Json
+      }
       admin_decide_withdrawal: {
         Args: {
           p_approve: boolean
@@ -3863,15 +4118,24 @@ export type Database = {
         Args: { p_profile_id: string; p_reason?: string }
         Returns: Json
       }
+      admin_delete_category: { Args: { p_id: string }; Returns: undefined }
       admin_delete_company: {
         Args: { p_company_id: string; p_reason?: string }
         Returns: Json
+      }
+      admin_delete_product_submission: {
+        Args: { p_id: string }
+        Returns: undefined
       }
       admin_delete_products: { Args: { p_ids: string[] }; Returns: Json }
       admin_delete_return_reason: {
         Args: { p_code: string }
         Returns: undefined
       }
+      admin_delete_specialty: { Args: { p_id: string }; Returns: undefined }
+      admin_delete_unit: { Args: { p_id: string }; Returns: undefined }
+      admin_delete_withdrawal: { Args: { p_id: string }; Returns: undefined }
+      admin_expiring_billing_plans: { Args: { p_days?: number }; Returns: Json }
       admin_finance_returns: {
         Args: {
           p_from?: string
@@ -3896,17 +4160,36 @@ export type Database = {
           p_dir?: string
           p_from?: string
           p_limit?: number
+          p_method?: string
           p_offset?: number
           p_search?: string
           p_seller?: string
           p_sort?: string
+          p_status?: string
           p_to?: string
         }
         Returns: Json
       }
       admin_invoices_stats: {
-        Args: { p_from?: string; p_to?: string }
+        Args: {
+          p_from?: string
+          p_method?: string
+          p_status?: string
+          p_to?: string
+        }
         Returns: Json
+      }
+      admin_issue_seller_statements: {
+        Args: { p_period_end?: string }
+        Returns: number
+      }
+      admin_launch_readiness: { Args: never; Returns: Json }
+      admin_notify_plan_expiry: {
+        Args: {
+          p_subject_id: string
+          p_subject_type: Database["public"]["Enums"]["billing_subject"]
+        }
+        Returns: number
       }
       admin_orders_list: {
         Args: {
@@ -3915,6 +4198,7 @@ export type Database = {
           p_limit?: number
           p_method?: string
           p_offset?: number
+          p_scope?: string
           p_search?: string
           p_sort?: string
           p_status?: string
@@ -3923,6 +4207,26 @@ export type Database = {
         Returns: Json
       }
       admin_overview_counts: { Args: never; Returns: Json }
+      admin_platform_balance: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_platform_withdrawals_list: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
+      admin_products_list: {
+        Args: {
+          p_active?: string
+          p_limit?: number
+          p_offers_max?: number
+          p_offers_min?: number
+          p_offset?: number
+          p_search?: string
+          p_specialty?: string
+        }
+        Returns: Json
+      }
       admin_reactivate_account: {
         Args: { p_profile_id: string }
         Returns: undefined
@@ -3931,10 +4235,21 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: undefined
       }
+      admin_record_withdrawal: {
+        Args: {
+          p_amount: number
+          p_at?: string
+          p_bank_ref?: string
+          p_note?: string
+        }
+        Returns: string
+      }
       admin_reject_seller: {
         Args: { p_note?: string; p_profile_id: string }
         Returns: undefined
       }
+      admin_restore_account: { Args: { p_profile_id: string }; Returns: Json }
+      admin_restore_company: { Args: { p_company_id: string }; Returns: Json }
       admin_returns_list: {
         Args: {
           p_dir?: string
@@ -3964,10 +4279,32 @@ export type Database = {
         Args: { p_from: string; p_to: string }
         Returns: Json
       }
+      admin_seller_balances: { Args: { p_search?: string }; Returns: Json }
       admin_seller_dashboard: {
         Args: { p_company_id: string; p_from?: string; p_to?: string }
         Returns: Json
       }
+      admin_seller_renewals_list: { Args: { p_status?: string }; Returns: Json }
+      admin_seller_settle: {
+        Args: {
+          p_amount: number
+          p_company: string
+          p_date?: string
+          p_kind: string
+          p_note?: string
+        }
+        Returns: string
+      }
+      admin_seller_statement: {
+        Args: {
+          p_company: string
+          p_from?: string
+          p_limit?: number
+          p_to?: string
+        }
+        Returns: Json
+      }
+      admin_seller_statements: { Args: { p_status?: string }; Returns: Json }
       admin_set_account_status: {
         Args: {
           p_profile_id: string
@@ -3993,12 +4330,20 @@ export type Database = {
         Args: { p_company_id: string; p_rate: number }
         Returns: undefined
       }
+      admin_set_subscription: {
+        Args: { p_note?: string; p_profile_id: string; p_until: string }
+        Returns: string
+      }
       admin_suspend_account: {
         Args: { p_profile_id: string; p_reason: string }
         Returns: undefined
       }
       admin_suspend_company: {
         Args: { p_company_id: string; p_reason: string }
+        Returns: undefined
+      }
+      admin_waive_statement: {
+        Args: { p_id: string; p_note?: string }
         Returns: undefined
       }
       admin_wallet_adjust: {
@@ -4048,6 +4393,8 @@ export type Database = {
           p_to?: string
         }
         Returns: {
+          address_area: string
+          address_label: string
           invoice_id: string
           invoice_number: string
           issued_at: string
@@ -4056,6 +4403,7 @@ export type Database = {
           seller_name: string
           site_code: string
           site_name: string
+          site_plot: string
           total: unknown
         }[]
       }
@@ -4068,6 +4416,8 @@ export type Database = {
           p_to?: string
         }
         Returns: {
+          address_area: string
+          address_label: string
           invoice_number: string
           issued_at: string
           item_id: string
@@ -4076,6 +4426,7 @@ export type Database = {
           qty: number
           seller_name: string
           site_name: string
+          site_plot: string
           sku: string
           unit_ar: string
           unit_price: unknown
@@ -4084,13 +4435,18 @@ export type Database = {
       buyer_report_past_orders: {
         Args: { p_from?: string; p_search?: string; p_to?: string }
         Returns: {
+          address_line: string
           delivered_at: string
           grand_total: unknown
+          invoice_id: string
+          invoice_number: string
           items_count: number
           order_id: string
           order_number: string
           placed_at: string
+          recipient_phone: string
           seller_label: string
+          site_name: string
         }[]
       }
       buyer_report_products_by_site: {
@@ -4134,7 +4490,9 @@ export type Database = {
           product_id: string
           qty_sold: number
           sku: string
+          specialty_ar: string
           total_amount: unknown
+          total_orders: number
           unit_ar: string
         }[]
       }
@@ -4157,19 +4515,27 @@ export type Database = {
           image_url: string
           items_count: number
           name_ar: string
+          orders_count: number
           specialty_id: string
           total_amount: unknown
+          total_orders: number
           units_qty: number
         }[]
       }
       buyer_report_top_suppliers: {
         Args: { p_from?: string; p_search?: string; p_to?: string }
         Returns: {
+          items_count: number
           logo_url: string
           name_ar: string
           orders_count: number
+          seller_code: string
           seller_company_id: string
+          sites_count: number
           total_amount: unknown
+          total_items: number
+          total_orders: number
+          total_sites: number
           units_qty: number
         }[]
       }
@@ -4188,12 +4554,14 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           delivery_fee: number
+          delivery_overdue_at: string | null
           discount_total: number
           grand_total: number
           id: string
           notes: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
@@ -4229,12 +4597,14 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           delivery_fee: number
+          delivery_overdue_at: string | null
           discount_total: number
           grand_total: number
           id: string
           notes: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
@@ -4255,6 +4625,17 @@ export type Database = {
         }
       }
       clear_draft_quotation: { Args: never; Returns: Json }
+      company_set_subuser_price: {
+        Args: { p_allowed: boolean; p_subuser: string }
+        Returns: boolean
+      }
+      company_subuser_price_perms: {
+        Args: never
+        Returns: {
+          can_change_price: boolean
+          subuser_id: string
+        }[]
+      }
       confirm_payment: { Args: { p_payment_id: string }; Returns: undefined }
       convert_level_for_branches: {
         Args: {
@@ -4275,8 +4656,10 @@ export type Database = {
         }
         Returns: {
           attachments: string[]
+          buyer_accepted: boolean | null
           buyer_company_id: string | null
           buyer_id: string
+          buyer_responded_at: string | null
           created_at: string
           id: string
           order_id: string
@@ -4319,8 +4702,10 @@ export type Database = {
         }
         Returns: {
           attachments: string[]
+          buyer_accepted: boolean | null
           buyer_company_id: string | null
           buyer_id: string
+          buyer_responded_at: string | null
           created_at: string
           id: string
           order_id: string
@@ -4358,14 +4743,19 @@ export type Database = {
           id: string
         }[]
       }
+      my_seller_contract: { Args: never; Returns: Json }
+      my_seller_statement: { Args: never; Returns: Json }
+      my_subscription: { Args: never; Returns: Json }
       pay_order: {
         Args: {
           p_expected_total: unknown
           p_order_group_id: string
+          p_payment_method?: Database["public"]["Enums"]["payment_method"]
           p_use_wallet?: boolean
         }
         Returns: string
       }
+      pay_subscription_from_wallet: { Args: never; Returns: Json }
       place_order: {
         Args: {
           p_address_id: string
@@ -4373,6 +4763,7 @@ export type Database = {
           p_discount_code?: string
           p_notes?: string
           p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_seller_company_id?: string
           p_site_id?: string
         }
         Returns: string
@@ -4382,6 +4773,7 @@ export type Database = {
           p_address_id?: string
           p_company_id?: string
           p_discount_code?: string
+          p_seller_company_id?: string
           p_use_wallet?: boolean
         }
         Returns: Json
@@ -4391,8 +4783,10 @@ export type Database = {
         Args: { p_return_id: string }
         Returns: {
           attachments: string[]
+          buyer_accepted: boolean | null
           buyer_company_id: string | null
           buyer_id: string
+          buyer_responded_at: string | null
           created_at: string
           id: string
           order_id: string
@@ -4512,6 +4906,41 @@ export type Database = {
           reservation_id: string
         }[]
       }
+      respond_to_return_decision: {
+        Args: { p_accept: boolean; p_return_id: string }
+        Returns: {
+          attachments: string[]
+          buyer_accepted: boolean | null
+          buyer_company_id: string | null
+          buyer_id: string
+          buyer_responded_at: string | null
+          created_at: string
+          id: string
+          order_id: string
+          picked_up_at: string | null
+          reason_code: string | null
+          reason_text: string | null
+          received_at: string | null
+          refund_amount: number
+          refund_method: string | null
+          refunded_at: string | null
+          rejection_reason: string | null
+          requested_at: string
+          return_number: string
+          seller_company_id: string
+          seller_decided_at: string | null
+          status: Database["public"]["Enums"]["return_status"]
+          total_accepted: number
+          total_rejected: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       seller_add_products: {
         Args: { p_product_ids: string[] }
         Returns: {
@@ -4537,12 +4966,14 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           delivery_fee: number
+          delivery_overdue_at: string | null
           discount_total: number
           grand_total: number
           id: string
           notes: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
@@ -4705,6 +5136,7 @@ export type Database = {
           grand_total: unknown
           id: string
           invoice_id: string
+          invoice_number: string
           is_returning: boolean
           notes: string
           order_number: string
@@ -4777,12 +5209,14 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           delivery_fee: number
+          delivery_overdue_at: string | null
           discount_total: number
           grand_total: number
           id: string
           notes: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
@@ -4817,12 +5251,14 @@ export type Database = {
           created_at: string
           delivered_at: string | null
           delivery_fee: number
+          delivery_overdue_at: string | null
           discount_total: number
           grand_total: number
           id: string
           notes: string | null
           order_group_id: string
           order_number: string
+          original_delivery_fee: number | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
@@ -4961,6 +5397,7 @@ export type Database = {
           units_qty: number
         }[]
       }
+      seller_request_renewal: { Args: { p_note?: string }; Returns: string }
       seller_return_detail: {
         Args: { p_return_id: string }
         Returns: {
@@ -5243,6 +5680,7 @@ export type Database = {
         | "return_credit"
         | "commission"
         | "adjustment"
+        | "subscription"
       withdrawal_status: "pending" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
@@ -5454,6 +5892,7 @@ export const Constants = {
         "return_credit",
         "commission",
         "adjustment",
+        "subscription",
       ],
       withdrawal_status: ["pending", "approved", "rejected", "paid"],
     },

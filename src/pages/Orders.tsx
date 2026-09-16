@@ -2,44 +2,43 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { fetchOrders, type OrderRow, type OrderSortKey, type OrdersScope } from '../api/orders';
+import { fetchOrders, type OrderRow, type OrderSortKey } from '../api/orders';
 import { PageHeader, StatusChip, Select, Input, Money, Card } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
-import { DateRangePicker, todayISO, daysAgoISO, type DateRange } from '../components/DateRangePicker';
 import { LocationCell } from '../components/LocationCell';
 import { fmtDateTime } from '../lib/format';
 import { orderStatusLabels, paymentMethodLabels, labelOf } from '../lib/labels';
 
-// «مسترجع» اتشالت من القايمة لأن مكانها تبويب المرتجعات — الطلب المسترجع نفسه
-// لسه بيبان تحت «كل الحالات».
-const STATUS_OPTIONS = Object.entries(orderStatusLabels).filter(([k]) => k !== 'refunded');
-
-// المحفظة وApple Pay والآجل موجودين في الداتا لكن مش خيارات فلتر — بيبانوا
-// تحت «كل الطرق» وعمود الدفع بيوضّح طريقتهم.
-const METHOD_OPTIONS: [string, string][] = [
-  ['cash_on_delivery', 'كاش عند التوصيل'],
-  ['knet', 'كي نت'],
-  ['credit_card', 'بطاقة ائتمان'],
+// الشاشة دي بتعرض الجاري بس، فالفلتر لازم يعرض حالات جارية بس — لو فيها
+// «تم التسليم» الأدمن هيختارها ويلاقي القايمة فاضية ومايعرفش ليه. المسلَّم
+// مستنده فاتورة، ومكانه قسم الفواتير.
+const IN_FLIGHT: string[] = [
+  'awaiting_seller_review', 'quoted', 'awaiting_payment',
+  'confirmed', 'preparing', 'out_for_delivery',
 ];
+const STATUS_OPTIONS = IN_FLIGHT
+  .filter((k) => k in orderStatusLabels)
+  .map((k) => [k, orderStatusLabels[k]] as [string, { label: string }]);
 
-// الطلب اللي اتلغى أو اتدفع خلاص بقى مستنده فاتورة — مكانه قسم الفواتير مش
-// هنا. بنسيب طريق للمؤرشف من نفس الشاشة عشان المراجعة، بس الافتراضي الجاري.
-const SCOPE_OPTIONS: { value: OrdersScope; label: string }[] = [
-  { value: 'current', label: 'عمليات جارية' },
-  { value: 'archived', label: 'مؤرشفة (مدفوعة/ملغاة)' },
-  { value: 'all', label: 'الكل' },
-];
+/**
+ * «ملغي» استثناء في الفلتر ده — مش حالة جارية، بس مالهاش مكان تاني.
+ *
+ * الطلب اللي اتلغى **قبل التأكيد** عمره ما اتعملّه فاتورة، فهو مش في الفواتير
+ * (وهي فواتير حقيقية بس بقرار العميل)، ومش في الجاري كمان. يعني كان بيختفي من
+ * اللوحة خالص: وقت كتابة السطر ده **24 طلب بـ8,267.149 د.ك**. اختياره بيحوّل
+ * النطاق لـ`archived` عشان الاستعلام يطلّعه.
+ */
+const CANCELLED = 'cancelled';
+
 
 export default function Orders() {
   const navigate = useNavigate();
-  // الافتراضي «النهارده»: الشاشة دي شغل اليوم الجاري، وأي طلب اتقفل (اتدفع أو
-  // اتلغى) مستنده في الفواتير. الفترة لسه قابلة للتغيير للمراجعة.
-  const [range, setRange] = useState<DateRange>({ from: todayISO(), to: todayISO() });
+  // مفيش فلتر فترة هنا عن قصد: الشاشة بتعرض الجاري، والجاري مالوش تاريخ
+  // انتهاء — الطلب اللي عدّى عليه أسبوع وهو لسه مفتوح هو بالظبط اللي محتاج
+  // متابعة. أول ما يتسلّم أو يتلغى بينتقل للفواتير.
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('all');
-  const [method, setMethod] = useState('all');
-  const [scope, setScope] = useState<OrdersScope>('current');
   const [sort, setSort] = useState<OrderSortKey>('placed_at');
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
@@ -52,27 +51,14 @@ export default function Orders() {
   }, [search, debouncedSearch]);
 
   const list = useQuery({
-    queryKey: ['orders', range.from, range.to, debouncedSearch, status, method, scope, sort, dir, page],
+    queryKey: ['orders', debouncedSearch, status, sort, dir, page],
     queryFn: () => fetchOrders({
-      from: range.from, to: range.to, search: debouncedSearch, status, method, scope,
+      from: null, to: null, search: debouncedSearch, status, method: 'all',
+      scope: status === CANCELLED ? 'archived' : 'current',
       sort, dir, page, pageSize: PAGE_SIZE,
     }),
     placeholderData: keepPreviousData,
   });
-
-  // عملية جارية من يوم فات مش مفروض تضيع ورا فلتر «النهارده» — بنعدّها وبنعرض
-  // زرار بيوسّع الفترة عشان الأدمن يلحقها. العدّ بيتعمل لما الفلتر يكون على
-  // وضعه الافتراضي بس.
-  const onToday = scope === 'current' && range.from === todayISO() && range.to === todayISO();
-  const older = useQuery({
-    queryKey: ['orders-open-before', range.from],
-    queryFn: () => fetchOrders({
-      from: null, to: daysAgoISO(1), search: '', status: 'all', method: 'all',
-      scope: 'current', sort: 'placed_at', dir: 'desc', page: 0, pageSize: 1,
-    }),
-    enabled: onToday,
-  });
-  const olderCount = onToday ? (older.data?.total ?? 0) : 0;
 
   function toggleSort(key: string) {
     if (key === sort) setDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -86,8 +72,20 @@ export default function Orders() {
     { key: 'buyer', header: 'المشتري', sortKey: 'buyer_name', render: (r) => r.buyerName ?? '—' },
     { key: 'seller', header: 'البائع', sortKey: 'seller_name', render: (r) => r.sellerName ?? '—' },
     { key: 'location', header: 'الموقع', render: (r) => <LocationCell loc={r.location} /> },
+    // شريحة «متأخر التسليم» جنب الحالة مش عمود لوحده: التأخير مش حالة تانية،
+    // ده نفس الطلب المؤكَّد وقف عند البائع. الأدمن بيدوّر عليه في نفس الخانة
+    // اللي بيقرا منها الحالة، والإشعار بيروح للطرفين مرة واحدة بس — فالشريحة
+    // دي هي المتابعة المستمرة لحد ما يتسلّم.
     { key: 'status', header: 'حالة الطلب', sortKey: 'status',
-      render: (r) => { const l = labelOf(orderStatusLabels, r.status); return <StatusChip label={l.label} tone={l.tone} />; } },
+      render: (r) => {
+        const l = labelOf(orderStatusLabels, r.status);
+        return (
+          <div className="flex flex-wrap items-center gap-1">
+            <StatusChip label={l.label} tone={l.tone} />
+            {r.deliveryOverdue && <StatusChip label="متأخر التسليم" tone="red" />}
+          </div>
+        );
+      } },
     // طريقة الدفع بس — حالة الدفع (مدفوع/معلق/مسترد) مكانها صفحة تفاصيل الطلب،
     // عشان عمود الدفع في القايمة يجاوب على سؤال واحد: اتدفع بإيه.
     { key: 'payment', header: 'الدفع',
@@ -101,11 +99,7 @@ export default function Orders() {
     <div>
       <PageHeader
         title="الطلبات"
-        subtitle={
-          scope === 'current'
-            ? 'عمليات اليوم الجارية — الطلب المدفوع أو الملغي مستنده في قسم الفواتير'
-            : 'بحث برقم الطلب أو اسم المشتري أو البائع'
-        }
+        subtitle="العمليات الجارية — الطلب اللي اتسلّم مستنده فاتورة، والملغي تحت فلتر «ملغي»"
       />
 
       <Card className="mb-4 flex flex-wrap items-center gap-2 p-3">
@@ -115,30 +109,15 @@ export default function Orders() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-64"
         />
-        <Select
-          value={scope}
-          onChange={(e) => { setScope(e.target.value as OrdersScope); setPage(0); }}
-          className="w-48"
-        >
-          {SCOPE_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </Select>
-        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-40">
-          <option value="all">كل الحالات</option>
+        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
+          <option value="all">كل الحالات الجارية</option>
           {STATUS_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          <option value={CANCELLED}>{labelOf(orderStatusLabels, CANCELLED).label}</option>
         </Select>
-        <Select value={method} onChange={(e) => { setMethod(e.target.value); setPage(0); }} className="w-40">
-          <option value="all">كل الطرق</option>
-          {METHOD_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </Select>
-        <DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets />
-        {olderCount > 0 && (
-          <button
-            type="button"
-            onClick={() => { setRange({ from: '', to: todayISO() }); setPage(0); }}
-            className="h-8 rounded-lg border border-accent/40 bg-accent/10 px-2 text-xs text-accent transition-colors hover:bg-accent/20"
-          >
-            {olderCount} عملية جارية من أيام سابقة — اعرضها
-          </button>
+        {status === CANCELLED && (
+          <span className="text-xs text-subtext">
+            الطلبات الملغية — اللي اتلغى قبل التأكيد مالوش فاتورة، فمكانه هنا.
+          </span>
         )}
       </Card>
 

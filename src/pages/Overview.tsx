@@ -11,6 +11,8 @@ import { DateRangePicker, todayISO, type DateRange } from '../components/DateRan
 import SalesChartCard from '../components/overview/SalesChartCard';
 import SpecialtySalesCard from '../components/overview/SpecialtySalesCard';
 import { ExpiringPlansCard } from '../components/ExpiringPlansCard';
+import { RenewalRequestsCard } from '../components/RenewalRequestsCard';
+import { LaunchReadinessCard } from '../components/LaunchReadinessCard';
 import { money } from '../lib/format';
 
 export default function Overview() {
@@ -60,6 +62,8 @@ export default function Overview() {
     <div>
       <PageHeader title="نظرة عامة" subtitle="مؤشرات حيّة من قاعدة البيانات" />
 
+      <LaunchReadinessCard />
+      <RenewalRequestsCard />
       <ExpiringPlansCard />
 
       {alerts.length > 0 && (

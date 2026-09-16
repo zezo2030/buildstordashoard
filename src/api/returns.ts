@@ -17,6 +17,8 @@ export type ReturnRow = {
   reasonText: string | null;
   refundAmount: number;
   requestedAt: string;
+  /** null = الفلوس لسه ما رجعتش للعميل. شوف `isRefundPending` في `labels.ts`. */
+  refundedAt: string | null;
 };
 
 export type ReturnsStats = {
@@ -27,6 +29,11 @@ export type ReturnsStats = {
   nBuyers: number;
   nSellers: number;
   refund: number;
+  /** اللي رجع فعلاً للعملاء — `refunded_at` متسجّل. */
+  refunded: number;
+  /** مقبول ولسه ما اترد: مبلغ مستحق على المنصة. */
+  pendingRefund: number;
+  nPending: number;
   feesRefunded: number;
 };
 
@@ -71,6 +78,7 @@ export async function fetchReturns(q: ReturnsQuery): Promise<{ rows: ReturnRow[]
       reasonText: (x.reason_text as string | null) ?? null,
       refundAmount: num(x.refund_amount),
       requestedAt: String(x.requested_at),
+      refundedAt: (x.refunded_at as string | null) ?? null,
     })),
     total: num(r.total),
   };
@@ -90,6 +98,9 @@ export async function fetchReturnsStats(from: string | null, to: string | null):
     nBuyers: num(r.n_buyers),
     nSellers: num(r.n_sellers),
     refund: num(r.refund),
+    refunded: num(r.refunded),
+    pendingRefund: num(r.pending_refund),
+    nPending: num(r.n_pending),
     feesRefunded: num(r.fees_refunded),
   };
 }

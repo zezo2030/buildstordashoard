@@ -41,10 +41,25 @@ export function offersRange(f: OffersFilter): { min: number | null; max: number 
   }
 }
 
+/**
+ * حالة المنتج — القيم بتتبعت للداتابيز زي ما هي وبتتحقق هناك.
+ *
+ * توقيف منتج من «التخصصات والفئات» بيشيله من الشاشة دي، فالفلتر ده هو طريق
+ * الرجوع الوحيد لما الأدمن ما يكونش فاكر الاسم ولا الـSKU.
+ */
+export type ActiveFilter = 'all' | 'active' | 'inactive';
+
+export const ACTIVE_FILTERS: { value: ActiveFilter; label: string }[] = [
+  { value: 'all', label: 'كل الحالات' },
+  { value: 'active', label: 'نشط' },
+  { value: 'inactive', label: 'موقوف' },
+];
+
 export type ProductsQuery = {
   search: string;
   specialty: string;
   offers: OffersFilter;
+  active: ActiveFilter;
   page: number;
   pageSize: number;
 };
@@ -58,6 +73,7 @@ export async function fetchProducts(q: ProductsQuery): Promise<{ rows: ProductRo
     p_offers_max: range.max,
     p_limit: q.pageSize,
     p_offset: q.page * q.pageSize,
+    p_active: q.active,
   } as never);
   if (error) throw new Error(arError(error));
   const r = data as unknown as { rows?: Record<string, unknown>[]; total?: unknown };

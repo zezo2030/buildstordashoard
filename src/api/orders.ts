@@ -17,6 +17,14 @@ export type OrderRow = {
   location: Loc | null;
   grandTotal: number;
   placedAt: string;
+  /**
+   * عدّى `delivery_due_days` من التأكيد والبائع ما علّمش التسليم.
+   *
+   * محسوب في القاعدة لحظيًا مش مخزّن، فبيتماشى مع الإعداد أول ما يتغيّر.
+   * الإشعار بيتبعت مرة واحدة للطرفين، والعمود ده هو اللي بيفضل باين للأدمن
+   * لحد ما الطلب يتسلّم فعلاً.
+   */
+  deliveryOverdue: boolean;
 };
 
 /**
@@ -70,6 +78,7 @@ export async function fetchOrders(q: OrdersQuery): Promise<{ rows: OrderRow[]; t
       location: toLoc(x.location),
       grandTotal: Number(x.grand_total ?? 0),
       placedAt: String(x.placed_at),
+      deliveryOverdue: x.delivery_overdue === true,
     })),
     total: Number(r.total ?? 0),
   };
