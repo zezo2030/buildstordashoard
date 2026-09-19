@@ -26,3 +26,6 @@ dist-ssr
 # Local env (secrets) — use .env.example as the template
 .env
 .env.local
+
+# Supabase CLI local state
+supabase/.temp/
