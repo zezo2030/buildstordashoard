@@ -547,7 +547,11 @@ function ReturnsCard({ title, party, selfName, rows }: {
               </span>
               <span className="shrink-0 text-xs tabular-nums text-subtext" dir="ltr">{r.count} مادة</span>
               <StatusChip label={l.label} tone={l.tone} />
-              {isRefundPending(r.status, r.refundedAt) && <StatusChip label="لسه ما اتردّش" tone="red" />}
+              {isRefundPending(r.status, r.refundedAt) && (
+              <span title="البائع وافق على الإرجاع، وقيمة المرتجع بتتقيّد في محفظة المشتري لما البائع يستلم البضاعة">
+                <StatusChip label="الفلوس لسه ما رجعتش للمشتري" tone="red" />
+              </span>
+            )}
               <span className="shrink-0 text-xs"><Money value={r.total} /></span>
               <span className="shrink-0 text-xs text-subtext">{fmtDateTime(r.at)}</span>
             </button>
@@ -573,7 +577,6 @@ function ReturnsCard({ title, party, selfName, rows }: {
       </Modal>
       {selected && (
         <ReturnDetailsModal
-          readOnly
           row={{
             id: selected.id,
             returnNumber: selected.number,

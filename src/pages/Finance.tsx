@@ -23,12 +23,15 @@ import {
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { DateRangePicker, type DateRange } from '../components/DateRangePicker';
 import { ReturnDetailsModal } from '../components/ReturnDetailsModal';
+import { BuyerSubscriptionPolicyCard } from '../components/BuyerSubscriptionPolicyCard';
+import { SubscriptionCell } from '../components/SubscriptionCell';
+import { fetchSubscribedUntil } from '../api/subscription-policy';
 import { BillingCell } from './accounts/BillingCell';
 import { statusCell } from './accounts/columns';
 import { fmtDate, fmtDateTime, money } from '../lib/format';
 import { localPhone } from '../lib/format';
 import { downloadCsv } from '../lib/csv';
-import { returnStatusLabels, labelOf, isRefundPending } from '../lib/labels';
+import { returnStatusLabels, labelOf, isRefundPending, RETURN_STATUS_FILTERS } from '../lib/labels';
 import { PlatformBalanceTab } from '../components/PlatformBalanceTab';
 import { SellerLedgerTab } from '../components/SellerLedgerTab';
 
@@ -124,6 +127,15 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
     placeholderData: keepPreviousData,
   });
 
+  // اشتراك المشتري مش في `billing_plans` — هو `profiles.subscribed_until`.
+  // بنجيبه للصفوف المعروضة بس، فاستعلام واحد مهما كان حجم الجدول.
+  const pageIds = (list.data?.rows ?? []).map((r) => r.id);
+  const until = useQuery({
+    queryKey: ['subscribed-until', pageIds],
+    queryFn: () => fetchSubscribedUntil(pageIds),
+    enabled: !isSeller && pageIds.length > 0,
+  });
+
   // فلتر نظام الرسوم بيتعمل على الصفحة المعروضة — الـRPC مابيفلترش بيه، وده
   // مقصود: الفلتر ده استعراضي بحت والفرز والبحث الحقيقيين في الداتابيز.
   const rows = (list.data?.rows ?? []).filter((r) => {
@@ -155,14 +167,27 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
     { key: 'code', header: 'ID', sortKey: 'account_code', render: (r) => <span dir="ltr">{r.accountCode ?? '—'}</span> },
     { key: 'phone', header: 'رقم الهاتف', sortKey: 'phone', render: (r) => <span dir="ltr">{localPhone(r.phone)}</span> },
     { key: 'subs', header: 'الحسابات النشطة', sortKey: 'sub_accounts', render: (r) => <span dir="ltr">{r.subAccounts}</span> },
-    {
-      key: 'plan',
-      header: isSeller ? 'نظام الرسوم' : 'رسوم الاشتراك',
-      sortKey: 'commission_rate',
-      render: (r) => <BillingCell key={r.id} row={r} kind={kind} />,
-    },
-    { key: 'from', header: 'من', render: (r) => (r.billingFrom ? fmtDate(r.billingFrom) : '—') },
-    { key: 'to', header: 'إلى', render: (r) => (r.billingTo ? fmtDate(r.billingTo) : '—') },
+    // البائع ليه خطة في `billing_plans` (نسبة أو اشتراك بمدة). المشتري لأ —
+    // اشتراكه سياسة عامة + تاريخ نهاية على حسابه، فأعمدة الخطة كانت بتطلع
+    // فاضية على طول الجدول وتوحي إن مافيش اشتراك أصلًا.
+    ...(isSeller ? [
+      {
+        key: 'plan',
+        header: 'نظام الرسوم',
+        sortKey: 'commission_rate',
+        render: (r: AccountRow) => <BillingCell key={r.id} row={r} kind={kind} />,
+      },
+      { key: 'from', header: 'من', render: (r: AccountRow) => (r.billingFrom ? fmtDate(r.billingFrom) : '—') },
+      { key: 'to', header: 'إلى', render: (r: AccountRow) => (r.billingTo ? fmtDate(r.billingTo) : '—') },
+    ] : [
+      {
+        key: 'subscription',
+        header: 'الاشتراك',
+        render: (r: AccountRow) => (
+          <SubscriptionCell profileId={r.id} until={until.data?.[r.id] ?? null} />
+        ),
+      },
+    ]),
     {
       // العمود كان بيقرا رسوم الاشتراك بس، فالبائع اللي على نسبة كان بيطلع
       // **صفر دايمًا** مهما باع. العمولة رقم محسوب على الطلب و**لسه ما اتحصّلش**
@@ -197,6 +222,7 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
 
   return (
     <div>
+      {!isSeller && <BuyerSubscriptionPolicyCard />}
       {summary.isError ? (
         <Card className="mb-4 p-4">
           <ErrorState
@@ -283,6 +309,7 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
 function ReturnsTab({ range }: { range: DateRange }) {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
+  const [status, setStatus] = useState('all');
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<FinanceReturnRow | null>(null);
 
@@ -293,9 +320,9 @@ function ReturnsTab({ range }: { range: DateRange }) {
   }, [search, debounced]);
 
   const q = useQuery({
-    queryKey: ['finance', 'returns', range.from, range.to, debounced, page],
+    queryKey: ['finance', 'returns', range.from, range.to, debounced, status, page],
     queryFn: () => fetchFinanceReturns({
-      from: range.from, to: range.to, search: debounced, page, pageSize: PAGE_SIZE,
+      from: range.from, to: range.to, search: debounced, status, page, pageSize: PAGE_SIZE,
     }),
     placeholderData: keepPreviousData,
   });
@@ -317,7 +344,7 @@ function ReturnsTab({ range }: { range: DateRange }) {
     { key: 'buyer', header: 'اسم المشتري', render: (r) => r.buyerName ?? '—' },
     { key: 'seller', header: 'اسم البائع', render: (r) => r.sellerName ?? '—' },
     { key: 'items', header: 'عدد المنتجات المرتجعة', render: (r) => <span dir="ltr">{r.nItems}</span> },
-    { key: 'refund', header: 'قيمة الرسوم المستردة', render: (r) => <Money value={r.refundAmount} /> },
+    { key: 'refund', header: 'مبلغ الفاتورة', render: (r) => <Money value={r.refundAmount} /> },
     {
       key: 'fees',
       header: 'الرسوم المعادة للبائع',
@@ -331,7 +358,11 @@ function ReturnsTab({ range }: { range: DateRange }) {
         return (
           <div className="flex flex-wrap items-center gap-1">
             <StatusChip label={l.label} tone={l.tone} />
-            {isRefundPending(r.status, r.refundedAt) && <StatusChip label="لسه ما اتردّش" tone="red" />}
+            {isRefundPending(r.status, r.refundedAt) && (
+              <span title="البائع وافق على الإرجاع، وقيمة المرتجع بتتقيّد في محفظة المشتري لما البائع يستلم البضاعة">
+                <StatusChip label="الفلوس لسه ما رجعتش للمشتري" tone="red" />
+              </span>
+            )}
           </div>
         );
       },
@@ -357,6 +388,14 @@ function ReturnsTab({ range }: { range: DateRange }) {
           onChange={(e) => setSearch(e.target.value)}
           className="w-72"
         />
+        {/* نفس مفاتيح صفحة المرتجعات: الفلتر على مجموعة الحالة، فـ«مقبول»
+            معناها واحد في الشاشتين. والكروت فوق بتتبع الفلتر. */}
+        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
+          <option value="all">كل الحالات</option>
+          {RETURN_STATUS_FILTERS.map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
+          ))}
+        </Select>
         <span className="text-xs text-subtext">اضغط على أي صف لعرض المواد المرتجعة وتفاصيل السند</span>
         <Btn
           variant="ghost"
@@ -365,12 +404,12 @@ function ReturnsTab({ range }: { range: DateRange }) {
             downloadCsv(
               `finance-returns-${range.from || 'all'}`,
               ['رقم المرتجع', 'رقم الطلب', 'المشتري', 'البائع', 'عدد المنتجات',
-                'قيمة المرتجع', 'الرسوم المعادة', 'الحالة', 'تاريخ التنفيذ'],
+                'مبلغ الفاتورة', 'الرسوم المعادة للبائع', 'الحالة', 'تاريخ التنفيذ'],
               rows.map((r) => [
                 r.returnNumber, r.orderNumber ?? '', r.buyerName ?? '', r.sellerName ?? '',
                 r.nItems, money(r.refundAmount), money(r.feesRefunded),
                 labelOf(returnStatusLabels, r.status).label
-                  + (isRefundPending(r.status, r.refundedAt) ? ' — لسه ما اتردّش' : ''),
+                  + (isRefundPending(r.status, r.refundedAt) ? ' — الفلوس لسه ما رجعتش للمشتري' : ''),
                 fmtDateTime(r.executedAt),
               ]),
             )
@@ -392,10 +431,8 @@ function ReturnsTab({ range }: { range: DateRange }) {
         onRowClick={setSelected}
         emptyTitle="لا توجد مرتجعات في الفترة"
       />
-      {/* قراءة بس — القرار على البنود وتعليم الاستلام مكانهم صفحة المرتجعات */}
       {selected && (
         <ReturnDetailsModal
-          readOnly
           row={{
             id: selected.id,
             returnNumber: selected.returnNumber,
@@ -498,7 +535,13 @@ function StatsTab({ range }: { range: DateRange }) {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCard title="١٢ · إجمالي عدد المرتجعات" value={n(d?.nReturns)} icon={<Undo2 size={20} />} tone="navy" />
           <KpiCard title="١٣ · إجمالي قيمة المرتجعات" value={m(d?.returnsValue)} icon={<Wallet size={20} />} tone="orange" />
-          <KpiCard title="١٤ · الرسوم المعادة للبائعين" value={m(d?.feesRefunded)} icon={<Undo2 size={20} />} tone="red" />
+          <KpiCard
+            title="١٤ · الرسوم المعادة للبائعين"
+            value={m(d?.feesRefunded)}
+            hint="المقيّد + المستحق على مرتجعات خلصت + المحجوز لمرتجعات جارية — التفصيل في تاب «٦. رصيد المنصة»"
+            icon={<Undo2 size={20} />}
+            tone="red"
+          />
           <KpiCard
             title="١٥ · صافي الأرباح بعد الاسترداد"
             value={m(d?.netProfit)}

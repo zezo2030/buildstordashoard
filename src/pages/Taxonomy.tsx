@@ -6,6 +6,7 @@ import { ChevronLeft, FolderOpen, ImagePlus, Package, Pencil, Trash2, X } from '
 import { supabase, arError } from '../lib/supabase';
 import { deleteCatalogProduct } from '../lib/catalog-product-delete';
 import { allSelected, pruneSelection, toggleAll, toggleId } from '../lib/bulk-select';
+import { splitLevelProducts } from '../lib/taxonomy-level';
 import { skuFromSourceCode } from '../lib/catalog-sku';
 import { PageHeader, Btn, Field, Input, Select, Toggle, Card, Spinner, EmptyState } from '../components/ui';
 import { ImportProductsModal } from '../components/ImportProductsModal';
@@ -45,6 +46,11 @@ type ProductRow = {
   is_active: boolean;
   unit_id: string;
   unit: { name_ar: string } | null;
+  /** المكان الأساسي للمادة — بيه بنعرف هي بتاعة المستوى ده ولا متحطّطة فيه زيادة */
+  specialty_id: string;
+  category_id: string | null;
+  /** صف المكان اللي طلّعها في المستوى ده — لازم عشان نقدر نشيلها من هنا بس */
+  product_placements: { id: string; specialty_id: string; category_id: string | null }[];
 };
 
 type Crumb = { kind: 'root' } | { kind: 'specialty'; id: string; name_ar: string } | { kind: 'category'; id: string; name_ar: string };
@@ -149,12 +155,17 @@ function TaxonomyBrowser() {
   const [editingProduct, setEditingProduct] = useState<ProductRow | null>(null);
   const [converting, setConverting] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<ProductRow | null>(null);
+  const [removingPlacement, setRemovingPlacement] = useState<{ id: string; name: string } | null>(null);
+  const [movingPlacement, setMovingPlacement] = useState<{ id: string; name: string } | null>(null);
   // تحديد أكتر من منتج للحذف مرة واحدة — الاختيار بيتصفّر مع كل تغيير مستوى
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importDrag, setImportDrag] = useState(false);
+  // المادة الموقوفة بتختفي من المستوى، فكان لازم تخرج من الصفحة دي عشان
+  // ترجّعها. المفتاح ده بيوريها في مكانها عشان ترجّعها من نفس السطر.
+  const [showStopped, setShowStopped] = useState(false);
 
   const current = path[path.length - 1]!;
   const specialtyCrumb = path.find((c): c is Extract<Crumb, { kind: 'specialty' }> => c.kind === 'specialty');
@@ -189,6 +200,10 @@ function TaxonomyBrowser() {
 
   // المنتج ممكن يكون متحطّط هنا كمكان إضافي مش كمكانه الأساسي — فبنقرا من
   // `product_placements` مش من أعمدة المنتج، وإلا المستوى يبان فاضي وهو مش فاضي.
+  //
+  // والموقوف بييجي مع المفعّل: بيتخفي من العرض بس لحد ما الأدمن يطلبه، إنما
+  // لازم يبقى موجود عشان يقدر يرجّعه من هنا. البوابة تحت بتحسب المفعّل بس —
+  // زي حارس الداتابيز اللي بيشرط `p.is_active`.
   const { data: products, isLoading: loadingProducts } = useQuery({
     queryKey: ['taxonomy-products', specialtyId, categoryCrumb?.id ?? 'none'],
     enabled: !!specialtyId,
@@ -196,11 +211,11 @@ function TaxonomyBrowser() {
       let q = supabase
         .from('products')
         .select(
-          'id, sku, source_code, name_ar, origin_country, brand, images, is_active, unit_id, unit:units (name_ar),' +
-          ' product_placements!inner (specialty_id, category_id)',
+          'id, sku, source_code, name_ar, origin_country, brand, images, is_active, unit_id,' +
+          ' specialty_id, category_id, unit:units (name_ar),' +
+          ' product_placements!inner (id, specialty_id, category_id)',
         )
         .eq('product_placements.specialty_id', specialtyId!)
-        .eq('is_active', true)
         .order('name_ar');
       q = categoryCrumb
         ? q.eq('product_placements.category_id', categoryCrumb.id)
@@ -273,6 +288,45 @@ function TaxonomyBrowser() {
     onError: (e) => toast('error', (e as Error).message),
   });
 
+  // شيل المادة من المستوى ده بس: بنمسح صف المكان مش المادة. الحذف مسموح
+  // للمكان الإضافي بس (الواجهة مابتعرضش الزرار على مكان أساسي)، والمكان
+  // الأساسي بيتعاد بناءه تلقائيًا من `ensure_primary_placement` لو اتمسح بالغلط.
+  const removePlacement = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('product_placements').delete().eq('id', id);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم شيل المادة من المستوى ده');
+      setRemovingPlacement(null);
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['catalog-tree'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // النقل مجرد `update` على صف المكان — `t_placements_xor` في الداتابيز هو
+  // اللي بيتأكد إن القسم تابع لنفس التخصص ومافيهوش أقسام تحته، فمافيش
+  // قاعدة متكررة هنا تنسى تتحدّث مع الداتابيز.
+  const movePlacement = useMutation({
+    mutationFn: async ({ id, categoryId }: { id: string; categoryId: string }) => {
+      const { error } = await supabase
+        .from('product_placements')
+        .update({ category_id: categoryId })
+        .eq('id', id);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم نقل المادة للقسم');
+      setMovingPlacement(null);
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['catalog-tree'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
   const saveSpecialty = useMutation({
     mutationFn: async () => {
       if (!editingSpecialty) return;
@@ -302,7 +356,7 @@ function TaxonomyBrowser() {
       if (!editingCategory || !specialtyId) return;
       if (!editingCategory.name_ar.trim()) throw new Error('الاسم مطلوب');
       // منع إضافة فرع جديد في مستوى فيه منتجات
-      if (!editingCategory.id && (products?.length ?? 0) > 0) {
+      if (!editingCategory.id && ownProducts.length > 0) {
         throw new Error('لا يمكن إضافة فرع هنا: هذا المستوى يحتوي منتجات بالفعل');
       }
       const payload = {
@@ -344,7 +398,9 @@ function TaxonomyBrowser() {
       qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
       qc.invalidateQueries({ queryKey: ['products'] });
       if (p.is_active) {
-        toast('success', `${p.name_ar} اتأرشف — ترجّعه من صفحة «المنتجات» بفلتر «موقوف»`);
+        toast('success', `${p.name_ar} اتوقف — شغّل «عرض الموقوف» فوق عشان ترجّعه، أو من صفحة «المنتجات» بفلتر «موقوف»`);
+      } else {
+        toast('success', `${p.name_ar} رجع شغّال`);
       }
     },
     onError: (e) => toast('error', (e as Error).message),
@@ -489,13 +545,29 @@ function TaxonomyBrowser() {
 
   const loading = loadingCats || loadingProducts;
   const hasBranches = (childCategories?.length ?? 0) > 0;
-  const hasProducts = (products?.length ?? 0) > 0;
-  const visibleProductIds = (products ?? []).map((p) => p.id);
+  // المستوى بيشوف نوعين مواد: بتاعته (مكانها الأساسي هنا) ومواد اتحطّت هنا
+  // كمكان إضافي من تخصص تاني. الفرق ده للعرض بس — القاعدة واحدة على
+  // الاتنين (`app.assert_taxonomy_xor_for_branch`)، بس الأكشن مختلف:
+  // بتاعة المستوى بتتنقل بتعديل المادة، والإضافية بتتنقل بتعديل مكانها.
+  const level = { specialtyId: specialtyId ?? '', categoryId: categoryCrumb?.id ?? null };
+  const levelProducts = products ?? [];
+  const liveProducts = levelProducts.filter((x) => x.is_active);
+  const stoppedCount = levelProducts.length - liveProducts.length;
+  const { own: ownProducts, extra: extraProducts } = splitLevelProducts(
+    showStopped ? levelProducts : liveProducts,
+    level,
+  );
+  // البوابة على المفعّل بس، عشان تطابق `app.assert_taxonomy_xor_for_branch`
+  // اللي بيشرط `p.is_active` — المادة الموقوفة مابتمنعش إضافة قسم.
+  const gate = splitLevelProducts(liveProducts, level);
+  const hasProducts = gate.own.length > 0;
+  const hasAnyProduct = gate.own.length > 0 || gate.extra.length > 0;
+  const visibleProductIds = ownProducts.map((p) => p.id);
   // الاختيار محفوظ في state لكن اللي بيتعرض هو المتقاطع مع المعروض دلوقتي —
   // كده تغيير المستوى مايسيبش منتجات محددة مش ظاهرة تتحذف بالغلط.
   const selected = pruneSelection(selectedIds, visibleProductIds);
   /** XOR: المستوى الفاضي يختار نوعه؛ بعد أول إضافة يتقفل النوع التاني */
-  const canAddBranch = !hasProducts;
+  const canAddBranch = !hasAnyProduct;
   const canAddProduct = !hasBranches;
   const levelMode: 'empty' | 'branches' | 'products' = hasBranches
     ? 'branches'
@@ -622,7 +694,54 @@ function TaxonomyBrowser() {
               </>
             )}
 
-            {(levelMode === 'products' || levelMode === 'empty') && (
+            {extraProducts.length > 0 && (
+              <>
+                <SectionTitle title="مواد متحطّطة هنا كمكان إضافي" count={extraProducts.length} />
+                <p className="border-b border-line bg-surface/60 px-4 py-2 text-xs text-subtext">
+                  {hasBranches
+                    ? 'المواد دي قاعدة في المستوى ده من غير ما تدخل قسم، فالمشتري مش بيلاقيها لو دخل أي قسم — انقلها لقسم. ولحد ما تتنقل، مش هينفع تضيف قسم جديد هنا.'
+                    : 'مكانها الأساسي في تخصص تاني وبتظهر للمشتري هنا كمان. «شيل من هنا» بيشيل الظهور في المستوى ده بس، مش بيحذف المادة.'}
+                </p>
+                <div className="divide-y divide-line border-b border-line">
+                  {extraProducts.map((p) => {
+                    const placement = p.product_placements[0];
+                    return (
+                      <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80">
+                        <Thumb url={p.images?.[0] ?? null} tone="accent" empty="package" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-primary">{p.name_ar}</div>
+                          <div className="text-xs text-subtext" dir="ltr">{p.sku}</div>
+                        </div>
+                        {hasBranches && (
+                          <Btn
+                            variant="accent"
+                            className="px-2.5 py-1 text-xs"
+                            disabled={!placement}
+                            onClick={() =>
+                              placement && setMovingPlacement({ id: placement.id, name: p.name_ar })
+                            }
+                          >
+                            <FolderOpen size={14} /> نقل لقسم
+                          </Btn>
+                        )}
+                        <Btn
+                          variant="ghost"
+                          className="px-2.5 py-1 text-xs"
+                          disabled={!placement}
+                          onClick={() =>
+                            placement && setRemovingPlacement({ id: placement.id, name: p.name_ar })
+                          }
+                        >
+                          <X size={14} /> شيل من هنا
+                        </Btn>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {(levelMode !== 'branches' || ownProducts.length > 0 || stoppedCount > 0) && (
               <div
                 onDragOver={(e) => {
                   if (!canAddProduct) return;
@@ -641,8 +760,20 @@ function TaxonomyBrowser() {
                 }}
                 className={importDrag ? 'bg-accent-soft/40' : undefined}
               >
-                <SectionTitle title="المنتجات في هذا المستوى" count={products?.length ?? 0} />
-                {!!products?.length && (
+                <SectionTitle title="المنتجات في هذا المستوى" count={ownProducts.length} />
+                {stoppedCount > 0 && (
+                  <label className="flex cursor-pointer items-center gap-2 border-b border-line bg-surface/60 px-4 py-2 text-xs text-subtext">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-accent"
+                      checked={showStopped}
+                      onChange={() => setShowStopped((v) => !v)}
+                    />
+                    عرض الموقوف ({stoppedCount}) — المادة الموقوفة بتختفي من هنا ومن التطبيق،
+                    وبترجع بنفس المفتاح اللي وقّفها
+                  </label>
+                )}
+                {ownProducts.length > 0 && (
                   <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface/60 px-4 py-2">
                     <label className="flex cursor-pointer items-center gap-2 text-xs text-subtext">
                       <input
@@ -667,7 +798,7 @@ function TaxonomyBrowser() {
                     )}
                   </div>
                 )}
-                {!products?.length ? (
+                {ownProducts.length === 0 ? (
                   <p className="px-4 py-6 text-center text-sm text-subtext">
                     لا توجد منتجات مربوطة بهذا المستوى
                     {canAddProduct && (
@@ -679,8 +810,13 @@ function TaxonomyBrowser() {
                   </p>
                 ) : (
                   <div className="divide-y divide-line">
-                    {products.map((p) => (
-                      <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80">
+                    {ownProducts.map((p) => (
+                      <div
+                        key={p.id}
+                        className={`flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80${
+                          p.is_active ? '' : ' bg-surface/40'
+                        }`}
+                      >
                         <input
                           type="checkbox"
                           aria-label={`تحديد ${p.name_ar}`}
@@ -690,13 +826,33 @@ function TaxonomyBrowser() {
                         />
                         <Thumb url={p.images?.[0] ?? null} tone="accent" empty="package" />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium text-primary">{p.name_ar}</div>
+                          <div className="flex items-center gap-2">
+                            <span className={`truncate font-medium${p.is_active ? ' text-primary' : ' text-subtext'}`}>
+                              {p.name_ar}
+                            </span>
+                            {!p.is_active && (
+                              <span className="shrink-0 rounded-md bg-white px-1.5 py-0.5 text-[11px] font-medium text-subtext ring-1 ring-line">
+                                موقوف
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-subtext" dir="ltr">
                             {p.sku}
                             {p.unit?.name_ar ? ` · ${p.unit.name_ar}` : ''}
                           </div>
                         </div>
-                        <Toggle checked={p.is_active} onChange={() => toggleProduct.mutate(p)} />
+                        {/* المستوى المقسّم مايصحّش يرجع فيه مادة مفعّلة —
+                            `t_products_xor` بيرفض، فبنقول السبب قبل الدوسة. */}
+                        <Toggle
+                          checked={p.is_active}
+                          disabled={!p.is_active && hasBranches}
+                          title={
+                            !p.is_active && hasBranches
+                              ? 'المستوى ده بقى فيه أقسام — انقل المادة لقسم من تعديل المادة عشان ترجّعها'
+                              : undefined
+                          }
+                          onChange={() => toggleProduct.mutate(p)}
+                        />
                         <button
                           type="button"
                           className="rounded-lg p-2 text-subtext hover:bg-white hover:text-primary"
@@ -722,6 +878,30 @@ function TaxonomyBrowser() {
           </>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={!!removingPlacement}
+        title="شيل المادة من المستوى"
+        message={
+          removingPlacement
+            ? `هتتشال «${removingPlacement.name}» من المستوى ده بس. المادة نفسها وعروض البائعين عليها ما بتتأثرش، وهتفضل في مكانها الأساسي.`
+            : ''
+        }
+        confirmLabel="شيل من هنا"
+        busy={removePlacement.isPending}
+        onConfirm={() => removingPlacement && removePlacement.mutate(removingPlacement.id)}
+        onClose={() => setRemovingPlacement(null)}
+      />
+
+      {movingPlacement && (
+        <MovePlacementModal
+          name={movingPlacement.name}
+          branches={childCategories ?? []}
+          busy={movePlacement.isPending}
+          onClose={() => setMovingPlacement(null)}
+          onMove={(categoryId) => movePlacement.mutate({ id: movingPlacement.id, categoryId })}
+        />
+      )}
 
       {editingCategory && (
         <CategoryModal
@@ -781,7 +961,7 @@ function TaxonomyBrowser() {
         <ConvertLevelModal
           specialtyId={specialtyId}
           levelCategoryId={categoryCrumb?.id ?? null}
-          productCount={products?.length ?? 0}
+          productCount={ownProducts.length}
           onClose={() => setConverting(false)}
           onDone={(newBranch) => {
             setConverting(false);
@@ -1013,6 +1193,43 @@ function ImagePicker({
         </div>
       </div>
     </Field>
+  );
+}
+
+/** اختيار القسم اللي المادة السايبة هتتنقل جوّاه. */
+function MovePlacementModal({
+  name,
+  branches,
+  busy,
+  onClose,
+  onMove,
+}: {
+  name: string;
+  branches: Category[];
+  busy: boolean;
+  onClose: () => void;
+  onMove: (categoryId: string) => void;
+}) {
+  const [target, setTarget] = useState('');
+  return (
+    <Modal title="نقل المادة لقسم" open onClose={onClose}>
+      <p className="mb-3 text-sm text-subtext">
+        «{name}» قاعدة في المستوى ده من غير قسم. اختار قسم تدخله — مكانها الأساسي في
+        التخصص التاني ما بيتأثرش.
+      </p>
+      <Field label="القسم">
+        <Select value={target} onChange={(e) => setTarget(e.target.value)}>
+          <option value="">— اختر قسم —</option>
+          {branches.map((c) => (
+            <option key={c.id} value={c.id}>{c.name_ar}</option>
+          ))}
+        </Select>
+      </Field>
+      <div className="mt-3 flex gap-2">
+        <Btn onClick={() => onMove(target)} busy={busy} disabled={!target}>نقل</Btn>
+        <Btn variant="ghost" onClick={onClose}>إلغاء</Btn>
+      </div>
+    </Modal>
   );
 }
 

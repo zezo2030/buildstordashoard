@@ -1,17 +1,14 @@
-// تفاصيل سند المرتجع: البنود والقيم والمسار والمستندات — ومعاها قرار البائع
-// لما الشاشة تكون شاشة تشغيل مش شاشة قراءة.
+// تفاصيل سند المرتجع: البنود والقيم والمسار والمستندات — **قراءة بس**.
 //
-// اتشال من `pages/Returns.tsx` لما تاب المرتجعات في «المال» احتاج يفتح نفس
-// التفاصيل. صفحة المرتجعات بتستخدمه بإجراءات، وتاب المال بيستخدمه `readOnly`
-// عشان القرار مكانه شاشة واحدة بس.
-import { useState } from 'react';
+// القرار على البنود بقى من تطبيق البائع لوحده. الأدمن مش طرف في بضاعة ما
+// شافهاش، ولما كان بيقرر من هنا كان بيقفل السند نيابةً عن البائع ويحرم
+// المشتري من ردّ البائع الحقيقي. نفس منطق «تم استلام المرتجع» اللي اتشال قبله.
 import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { FileText, Paperclip } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
-import { decideReturn, type ReturnDecision } from '../api/returns';
 import type { Loc } from '../api/location';
-import { Btn, ErrorState, Input, Money, StatusChip, Textarea } from './ui';
+import { ErrorState, Money, StatusChip } from './ui';
 import { LocationCell } from './LocationCell';
 import { Modal } from './Modal';
 import { fmtDateTime, qty } from '../lib/format';
@@ -61,6 +58,8 @@ type ReturnDetail = {
   return_reasons: { label_ar: string } | null;
   return_items: ReturnItemRow[];
   return_documents: { id: string; doc_type: string; pdf_path: string; created_at: string }[];
+  /** بيانات الطلب الأصلي — بنحتاج الخصم عشان نفسّر الفرق في المسترد. */
+  order: { order_number: string; subtotal: string | number; discount_total: string | number } | null;
 };
 
 const RETURN_DOCS_BUCKET = 'return-docs';
@@ -78,135 +77,10 @@ function fileName(path: string) {
   return path.split('/').pop() || path;
 }
 
-/**
- * قرار البائع على بنود السند.
- *
- * القرار مابيقيّدش رصيد — القيد بيحصل في `receive_return` لما البضاعة توصل
- * فعلًا، والبائع هو اللي بيعلّم الاستلام من تطبيقه. من غير الفصل ده كان
- * المشتري بياخد القيمة والمنتج لسه معاه.
- */
-function DecisionPanel({ returnId, items, unitOf, onDone }: {
-  returnId: string;
-  items: ReturnItemRow[];
-  unitOf: (it: ReturnItemRow) => string;
-  onDone: () => void;
-}) {
-  // المبدئي: قبول الكمية المطلوبة كاملة لكل بند.
-  const [accepted, setAccepted] = useState<Record<string, number>>(() =>
-    Object.fromEntries(items.map((it) => [it.id, Number(it.qty_requested ?? 0)])),
-  );
-  const [reasons, setReasons] = useState<Record<string, string>>({});
-  const [note, setNote] = useState('');
-  const [err, setErr] = useState<string | null>(null);
-
-  const decide = useMutation({
-    mutationFn: () => {
-      const decisions: ReturnDecision[] = items.map((it) => {
-        const req = Number(it.qty_requested ?? 0);
-        const acc = Math.max(0, Math.min(req, accepted[it.id] ?? 0));
-        return {
-          returnItemId: it.id,
-          qtyAccepted: acc,
-          qtyRejected: req - acc,
-          rejectionReason: req - acc > 0 ? (reasons[it.id] || null) : null,
-        };
-      });
-      return decideReturn(returnId, decisions, note.trim() || null);
-    },
-    onMutate: () => setErr(null),
-    onSuccess: onDone,
-    onError: (e: Error) => setErr(e.message),
-  });
-
-  const acceptAll = () =>
-    setAccepted(Object.fromEntries(items.map((it) => [it.id, Number(it.qty_requested ?? 0)])));
-  const rejectAll = () => setAccepted(Object.fromEntries(items.map((it) => [it.id, 0])));
-
-  return (
-    <div className="mt-3 rounded-lg border border-accent/40 bg-accent/5 p-3">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-bold">قرار على السند</div>
-        <div className="flex gap-2">
-          <Btn variant="ghost" onClick={acceptAll}>قبول الكل</Btn>
-          <Btn variant="ghost" onClick={rejectAll}>رفض الكل</Btn>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        {items.map((it) => {
-          const req = Number(it.qty_requested ?? 0);
-          const acc = accepted[it.id] ?? 0;
-          return (
-            <div key={it.id} className="rounded-md border border-line bg-white p-2.5">
-              <div className="mb-1.5 text-sm font-medium">{it.order_item?.name_ar ?? '—'}</div>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <label className="text-xs text-subtext">
-                  المقبول من {qty(req)} {unitOf(it)}
-                </label>
-                <Input
-                  type="number"
-                  min={0}
-                  max={req}
-                  value={acc}
-                  onChange={(e) =>
-                    setAccepted((cur) => ({
-                      ...cur,
-                      [it.id]: Math.max(0, Math.min(req, Number(e.target.value))),
-                    }))
-                  }
-                  className="w-24"
-                />
-                {req - acc > 0 && (
-                  <Input
-                    placeholder="سبب رفض هذا الصنف"
-                    value={reasons[it.id] ?? ''}
-                    onChange={(e) => setReasons((cur) => ({ ...cur, [it.id]: e.target.value }))}
-                    className="min-w-[180px] flex-1"
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-2">
-        <Textarea
-          rows={2}
-          placeholder="ملاحظة عامة على القرار (اختياري)"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-      </div>
-
-      {err && <p className="mt-2 text-sm text-danger">{err}</p>}
-
-      <p className="mt-2 text-xs text-subtext">
-        القرار مش بيحوّل فلوس — المبلغ بيتقيّد في محفظة المشتري بعد تعليم استلام البضاعة.
-      </p>
-
-      <div className="mt-2">
-        <Btn onClick={() => decide.mutate()} busy={decide.isPending}>حفظ القرار</Btn>
-      </div>
-    </div>
-  );
-}
-
-export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
+export function ReturnDetailsModal({ row, onClose }: {
   row: ReturnModalRow;
-  /** شاشة قراءة: من غير قرار على البنود. */
-  readOnly?: boolean;
   onClose: () => void;
 }) {
-  const queryClient = useQueryClient();
-
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ['return', row.id] });
-    void queryClient.invalidateQueries({ queryKey: ['returns'] });
-    void queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
-    void queryClient.invalidateQueries({ queryKey: ['finance'] });
-  };
-
   const { data, isLoading, error } = useQuery({
     queryKey: ['return', row.id],
     queryFn: async () => {
@@ -222,7 +96,8 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
              unit_price, accepted_total,
              order_item:order_items (name_ar, sku, unit_ar, origin_country)
            ),
-           return_documents (id, doc_type, pdf_path, created_at)`,
+           return_documents (id, doc_type, pdf_path, created_at),
+           order:orders (order_number, subtotal, discount_total)`,
         )
         .eq('id', row.id)
         .single();
@@ -230,6 +105,16 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
       return data as unknown as ReturnDetail;
     },
   });
+
+  // «مبلغ الفاتورة» أقل من «قيمة المقبول» لما الطلب يكون عليه خصم: المشتري
+  // دفع بعد الخصم، فبيرجع له اللي دفعه مش سعر القايمة. `decide_return` بتطرح
+  // حصة كل بند من خصمه. من غير السطر ده الفرق بيبان كأنه اقتطاع مجهول.
+  const acceptedTotal = Number(data?.total_accepted ?? 0);
+  const refundTotal = Number(data?.refund_amount ?? row.refundAmount ?? 0);
+  const discountCut = data?.seller_decided_at ? acceptedTotal - refundTotal : 0;
+  const orderSubtotal = Number(data?.order?.subtotal ?? 0);
+  const orderDiscount = Number(data?.order?.discount_total ?? 0);
+  const discountPct = orderSubtotal > 0 ? (orderDiscount / orderSubtotal) * 100 : null;
 
   const st = labelOf(returnStatusLabels, row.status);
   const reasonLabel = data?.return_reasons?.label_ar ?? null;
@@ -253,9 +138,11 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
         {/* الخط الزمني تحت بيقول إيه اللي حصل بالظبط — الشريحة دي عشان
             «مقبول» ما تتقريش على إنها «خلصت والفلوس رجعت». */}
         {/* `data` لسه بتتحمّل ⇒ ما نعرضش حاجة: `refunded_at` الفاضية وقت
-            التحميل هتقول «لسه ما اتردّش» على سند خلص فعلاً. */}
+            التحميل هتقول إن الفلوس ما رجعتش على سند خلص فعلاً. */}
         {data && isRefundPending(row.status, data.refunded_at) && (
-          <StatusChip label="لسه ما اتردّش" tone="red" />
+          <span title="البائع وافق على الإرجاع، وقيمة المرتجع بتتقيّد في محفظة المشتري لما البائع يستلم البضاعة">
+            <StatusChip label="الفلوس لسه ما رجعتش للمشتري" tone="red" />
+          </span>
         )}
         {data?.refund_method && (() => {
           const rm = labelOf(refundMethodLabels, data.refund_method);
@@ -352,25 +239,15 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
             </table>
           </div>
 
-          {/* لسه مافيش قرار ⇒ نموذج القرار. اتقرر ومستنّي البضاعة ⇒ زر الاستلام. */}
-          {!readOnly && !data?.seller_decided_at && items.length > 0 && (
-            <DecisionPanel
-              returnId={row.id}
-              items={items}
-              unitOf={(it) => it.order_item?.unit_ar ?? ''}
-              onDone={refresh}
-            />
-          )}
-
           {/* «تم استلام المرتجع» اتشال من اللوحة: استلام البضاعة حاجة بتحصل
               في مخزن البائع، والبائع بيعلّمها من تطبيقه
               (`(seller)/returns/[id].tsx` بينده نفس `receive_return`). الأدمن
               مش طرف في تسليم بضاعة ما شافهاش — ولما كان بيعلّمها من هنا كان
               بيقيّد فلوس في محفظة المشتري نيابةً عن البائع. */}
 
-          {readOnly && (
+          {!data?.seller_decided_at && (
             <p className="mt-3 rounded-lg bg-surface p-2.5 text-xs text-subtext">
-              للقرار على البنود افتح السند من صفحة «المرتجعات».
+              بانتظار قرار البائع على البنود — بيتاخد من تطبيق البائع، واللوحة للمتابعة بس.
             </p>
           )}
 
@@ -384,10 +261,25 @@ export function ReturnDetailsModal({ row, readOnly = false, onClose }: {
               <dt className="text-subtext">قيمة المرفوض</dt>
               <dd>{data?.seller_decided_at ? <Money value={data.total_rejected} /> : '—'}</dd>
             </div>
+            {discountCut > 0.0005 && (
+              <div className="flex justify-between text-danger">
+                <dt>
+                  حصة المقبول من خصم الطلب
+                  {discountPct != null && ` (${discountPct.toFixed(1)}٪)`}
+                </dt>
+                <dd>− <Money value={discountCut} /></dd>
+              </div>
+            )}
             <div className="flex justify-between border-t border-line pt-1.5 font-bold">
-              <dt>المبلغ المسترد</dt><dd><Money value={data?.refund_amount ?? row.refundAmount} /></dd>
+              <dt>مبلغ الفاتورة</dt><dd><Money value={refundTotal} /></dd>
             </div>
           </dl>
+          {discountCut > 0.0005 && (
+            <p className="mt-1.5 text-xs text-subtext">
+              المشتري دفع بعد خصم الطلب، فبيرجع له اللي دفعه فعلًا مش سعر القايمة —
+              الخصم بيتوزّع على البنود بنسبة الكمية المقبولة.
+            </p>
+          )}
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-line p-3">

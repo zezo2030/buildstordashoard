@@ -78,12 +78,26 @@ export default function Returns() {
         return (
           <div className="flex flex-wrap items-center gap-1">
             <StatusChip label={l.label} tone={l.tone} />
-            {isRefundPending(r.status, r.refundedAt) && <StatusChip label="لسه ما اتردّش" tone="red" />}
+            {isRefundPending(r.status, r.refundedAt) && (
+              <span title="البائع وافق على الإرجاع، وقيمة المرتجع بتتقيّد في محفظة المشتري لما البائع يستلم البضاعة">
+                <StatusChip label="الفلوس لسه ما رجعتش للمشتري" tone="red" />
+              </span>
+            )}
           </div>
         );
       } },
-    { key: 'refund', header: 'المبلغ المسترد', sortKey: 'refund_amount',
+    { key: 'refund', header: 'مبلغ الفاتورة', sortKey: 'refund_amount',
       render: (r) => <Money value={r.refundAmount} /> },
+    // حركتين مختلفتين على نفس السند: دي للمشتري ودي للبائع. التقدير بيتعلّم
+    // عشان ما يتقريش كأنه فلوس اتحوّلت خلاص.
+    { key: 'fee', header: 'الرسوم المعادة للبائع',
+      render: (r) => (r.feeRefund > 0 ? (
+        <span className={r.feePosted ? undefined : 'text-subtext'}
+          title={r.feePosted ? undefined : 'تقدير — السند لسه ما خلصش والقيد ما اتعملش'}>
+          <Money value={r.feeRefund} />
+          {!r.feePosted && ' (متوقع)'}
+        </span>
+      ) : <span className="text-subtext">—</span>) },
     { key: 'at', header: 'التاريخ', sortKey: 'requested_at',
       render: (r) => <span className="text-xs">{fmtDateTime(r.requestedAt)}</span> },
   ];
@@ -107,14 +121,17 @@ export default function Returns() {
           <KpiCard title="المسترد فعليًا" value={s ? <Money value={s.refunded} /> : '…'}
             icon={<Wallet size={20} />} tone="green"
             footer={<DateRangePicker value={range} onChange={(v) => { setRange(v); setPage(0); }} presets allowAll />} />
-          <KpiCard title="مقبول ولسه ما اتردّش" value={s ? <Money value={s.pendingRefund} /> : '…'}
-            hint={s ? `${s.nPending} سند` : undefined}
+          <KpiCard title="مستحق للمشترين ولسه ما اتصرفش" value={s ? <Money value={s.pendingRefund} /> : '…'}
+            hint={s ? `${s.nPending} سند — البائع وافق والبضاعة لسه ما وصلتوش` : undefined}
             icon={<Wallet size={20} />} tone="red" />
           <KpiCard title="عدد المرتجعات" value={s ? s.nReturns : '…'} icon={<Undo2 size={20} />} tone="navy" />
           <KpiCard title="عدد المواد المرتجعة" value={s ? s.nItems : '…'} icon={<Package size={20} />} tone="blue" />
           {/* الرسوم اللي المنصة رجّعتها للبائع على المواد المرتجعة — البائع
-              اللي على اشتراك ثابت مالوش استرداد لأنه مادفعش عمولة أصلاً. */}
+              اللي على اشتراك ثابت مالوش استرداد لأنه مادفعش عمولة أصلاً.
+              الرقم بيشمل تقدير للسندات اللي لسه ما اتصرفتش، فمش دايمًا = نسبة
+              العمولة × «المسترد فعليًا». التفصيل في المال ‹ ٦. رصيد المنصة. */}
           <KpiCard title="الرسوم المعادة للبائعين" value={s ? <Money value={s.feesRefunded} /> : '…'}
+            hint="على مبلغ الفاتورة بعد الخصم — ويشمل تقدير للسندات اللي لسه جارية"
             icon={<Undo2 size={20} />} tone="green" />
         </div>
       )}

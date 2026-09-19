@@ -5,6 +5,14 @@
 //
 //     + عمولات الطلبات + الاشتراكات − عمولات المرتجعات − المسحوب للبنك
 //
+// و«عمولات المرتجعات» تلات أرقام مش رقم:
+//   `totalRefunds`  اللي اتقيّد فعلًا في `platform_fees`
+//   `refundsDue`    مرتجعات خلصت والفلوس راحت للمشتري، والعمولة لسه ما رجعتش
+//   `refundsHeld`   مرتجعات لسه جارية — محجوزة لحد ما تخلص
+// التلاتة بيتخصموا من `balance`، ومجموعهم = «١٤ · الرسوم المعادة» في تاب
+// الإحصائيات. قبل كده الرصيد كان بيخصم الأول بس، فكان بيسمح بسحب فلوس
+// المنصة مش بتاعتها.
+//
 // و«السحب» تسجيل لتحويل بنكي حصل بره النظام، مش أمر تحويل — عشان كده مفيش
 // حالات ولا موافقات زي طلبات سحب البائعين.
 import { supabase, arError } from '../lib/supabase';
@@ -19,6 +27,10 @@ export type PlatformBalance = {
   totalCommission: number;
   totalSubscriptions: number;
   totalRefunds: number;
+  /** مرتجعات خلصت وعمولتها ما رجعتش للبائع — دَين مستحق مش ربح. */
+  refundsDue: number;
+  /** مرتجعات لسه جارية — محجوزة من الرصيد لحد ما تخلص. */
+  refundsHeld: number;
   totalIncome: number;
   withdrawn: number;
   balance: number;
@@ -66,6 +78,8 @@ export async function fetchPlatformBalance(
     totalCommission: num(r.total_commission),
     totalSubscriptions: num(r.total_subscriptions),
     totalRefunds: num(r.total_refunds),
+    refundsDue: num(r.refunds_due),
+    refundsHeld: num(r.refunds_held),
     totalIncome: num(r.total_income),
     withdrawn: num(r.withdrawn),
     balance: num(r.balance),
@@ -75,6 +89,31 @@ export async function fetchPlatformBalance(
     customerTopups: num(r.customer_topups),
     customerPayouts: num(r.customer_payouts),
   };
+}
+
+/** صاحب كل محفظة فيها رصيد — «أموال العملاء» رقم مجمّع، وده تفصيله. */
+export type CustomerWallet = {
+  walletId: string;
+  side: 'buyer' | 'seller' | null;
+  ownerType: string;
+  ownerId: string;
+  name: string;
+  balance: number;
+  lastTxnAt: string | null;
+};
+
+export async function fetchCustomerWallets(): Promise<CustomerWallet[]> {
+  const { data, error } = await supabase.rpc('admin_customer_wallets' as never);
+  if (error) throw new Error(arError(error));
+  return ((data ?? []) as Record<string, unknown>[]).map((w) => ({
+    walletId: String(w.wallet_id),
+    side: (w.side as 'buyer' | 'seller' | null) ?? null,
+    ownerType: String(w.owner_type),
+    ownerId: String(w.owner_id),
+    name: String(w.name),
+    balance: num(w.balance),
+    lastTxnAt: (w.last_txn_at as string | null) ?? null,
+  }));
 }
 
 export async function fetchWithdrawals(limit = 50): Promise<PlatformWithdrawal[]> {

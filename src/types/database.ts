@@ -1717,6 +1717,7 @@ export type Database = {
           paid_at: string | null
           raw_response: Json | null
           status: Database["public"]["Enums"]["payment_status"]
+          subscription_company_id: string | null
           subscription_profile_id: string | null
           updated_at: string
           user_id: string
@@ -1734,6 +1735,7 @@ export type Database = {
           paid_at?: string | null
           raw_response?: Json | null
           status?: Database["public"]["Enums"]["payment_status"]
+          subscription_company_id?: string | null
           subscription_profile_id?: string | null
           updated_at?: string
           user_id: string
@@ -1751,6 +1753,7 @@ export type Database = {
           paid_at?: string | null
           raw_response?: Json | null
           status?: Database["public"]["Enums"]["payment_status"]
+          subscription_company_id?: string | null
           subscription_profile_id?: string | null
           updated_at?: string
           user_id?: string
@@ -1762,6 +1765,13 @@ export type Database = {
             columns: ["order_group_id"]
             isOneToOne: false
             referencedRelation: "order_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_company_id_fkey"
+            columns: ["subscription_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
@@ -4024,6 +4034,7 @@ export type Database = {
         Args: { p_from?: string; p_profile_id: string; p_to?: string }
         Returns: Json
       }
+      admin_buyer_subscription_policy: { Args: never; Returns: Json }
       admin_collect_subscription: {
         Args: {
           p_amount: number
@@ -4068,6 +4079,7 @@ export type Database = {
         }
         Returns: string
       }
+      admin_customer_wallets: { Args: never; Returns: Json }
       admin_dashboard_stats: { Args: never; Returns: Json }
       admin_decide_product_request: {
         Args: { p_note?: string; p_request_id: string; p_status: string }
@@ -4136,16 +4148,28 @@ export type Database = {
       admin_delete_unit: { Args: { p_id: string }; Returns: undefined }
       admin_delete_withdrawal: { Args: { p_id: string }; Returns: undefined }
       admin_expiring_billing_plans: { Args: { p_days?: number }; Returns: Json }
-      admin_finance_returns: {
-        Args: {
-          p_from?: string
-          p_limit?: number
-          p_offset?: number
-          p_search?: string
-          p_to?: string
-        }
-        Returns: Json
-      }
+      admin_finance_returns:
+        | {
+            Args: {
+              p_from?: string
+              p_limit?: number
+              p_offset?: number
+              p_search?: string
+              p_to?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_from?: string
+              p_limit?: number
+              p_offset?: number
+              p_search?: string
+              p_status?: string
+              p_to?: string
+            }
+            Returns: Json
+          }
       admin_finance_stats: {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
@@ -4153,6 +4177,10 @@ export type Database = {
       admin_finance_summary: {
         Args: { p_from?: string; p_subject_type: string; p_to?: string }
         Returns: Json
+      }
+      admin_grant_subscription_days: {
+        Args: { p_days: number; p_note?: string; p_profile_id: string }
+        Returns: string
       }
       admin_invoices_list: {
         Args: {
@@ -4325,6 +4353,16 @@ export type Database = {
           p_subject_type: string
         }
         Returns: string
+      }
+      admin_set_buyer_subscription_policy: {
+        Args: {
+          p_fee_company: number
+          p_fee_individual: number
+          p_period_days: number
+          p_reminder_days?: number
+          p_trial_days: number
+        }
+        Returns: Json
       }
       admin_set_company_commission: {
         Args: { p_company_id: string; p_rate: number }
@@ -4755,6 +4793,7 @@ export type Database = {
         }
         Returns: string
       }
+      pay_seller_subscription_from_wallet: { Args: never; Returns: Json }
       pay_subscription_from_wallet: { Args: never; Returns: Json }
       place_order: {
         Args: {

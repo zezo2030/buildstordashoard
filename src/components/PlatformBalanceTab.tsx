@@ -9,10 +9,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Wallet, PiggyBank, Undo2, Landmark, Trash2, TrendingUp, Users,
+  Wallet, PiggyBank, Undo2, Landmark, Trash2, TrendingUp, Users, ChevronLeft,
 } from 'lucide-react';
 import {
   fetchPlatformBalance, fetchWithdrawals, recordWithdrawal, deleteWithdrawal,
+  fetchCustomerWallets,
 } from '../api/platform-balance';
 import type { DateRange } from './DateRangePicker';
 import { Card, KpiCard, Money, Btn, Field, Input, Textarea, ErrorState, Spinner } from './ui';
@@ -29,12 +30,18 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
   const [note, setNote] = useState('');
   const [at, setAt] = useState('');
   const [delTarget, setDelTarget] = useState<string | null>(null);
+  const [wallets, setWallets] = useState(false);
 
   const balance = useQuery({
     queryKey: ['platform-balance', range.from, range.to],
     queryFn: () => fetchPlatformBalance(range.from, range.to),
   });
   const list = useQuery({ queryKey: ['platform-withdrawals'], queryFn: () => fetchWithdrawals() });
+  const owners = useQuery({
+    queryKey: ['customer-wallets'],
+    queryFn: fetchCustomerWallets,
+    enabled: wallets,
+  });
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['platform-balance'] });
@@ -82,9 +89,23 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
             <Money value={b.balance} />
           </p>
           <p className="mt-1 text-xs text-subtext">
-            إجمالي الدخل <Money value={b.totalIncome} /> ناقص المسحوب <Money value={b.withdrawn} />
-            {' '}— رقم تراكمي، مش تابع لفلتر الفترة
+            إجمالي الدخل <Money value={b.totalIncome} /> ناقص المسحوب{' '}
+            <Money value={b.withdrawn} /> — رقم تراكمي، مش تابع لفلتر الفترة
           </p>
+          {/* العمولة اللي هترجع للبائع مش ربح حتى لو لسه ما اتقيّدتش — من غير
+              الخصم ده الرقم فوق بيسمح بسحب فلوس المنصة مش بتاعتها. */}
+          {(b.refundsDue > 0 || b.refundsHeld > 0) && (
+            <p className="mt-1.5 text-xs text-danger">
+              متخصوم كمان:
+              {b.refundsDue > 0 && (
+                <> عمولة مرتجعات خلصت وما اتقيّدتش <Money value={b.refundsDue} /></>
+              )}
+              {b.refundsDue > 0 && b.refundsHeld > 0 && ' ·'}
+              {b.refundsHeld > 0 && (
+                <> محجوز لمرتجعات لسه جارية <Money value={b.refundsHeld} /></>
+              )}
+            </p>
+          )}
         </div>
         <Btn onClick={() => setOpen(true)}>
           <Landmark size={15} /> تسجيل سحب بنكي
@@ -106,8 +127,21 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
               أرصدة المشترين <Money value={b.buyerFunds} /> · أرصدة البائعين{' '}
               <Money value={b.sellerFunds} />
             </p>
+            {/* رصيد البائع بيبان صغير على غير المتوقع — السبب إن فلوس البيع
+                ما بتعدّيش على المحفظة أصلًا في الدفع كاش. */}
+            <p className="mt-1 text-xs text-subtext">
+              رصيد البائع بيتكوّن من استرداد عمولات المرتجعات — فلوس البيع نفسها ما
+              بتعدّيش على المحفظة لما الدفع كاش عند الاستلام.
+            </p>
           </div>
           <div className="text-xs text-subtext">
+            <button
+              type="button"
+              onClick={() => setWallets(true)}
+              className="mb-1 flex items-center gap-1 font-medium text-accent hover:underline"
+            >
+              مين شايل الفلوس دي؟ <ChevronLeft size={14} />
+            </button>
             <p className="font-bold text-danger">مش للسحب</p>
             <p className="mt-1 max-w-xs leading-relaxed">
               لما العميل يشحن محفظته الفلوس بتدخل حساب المنصة في البنك فعلًا، بس تفضل ملكه لحد
@@ -129,8 +163,19 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
           icon={<PiggyBank size={20} />} tone="blue" />
         {/* دي بتطلع من نفس الرصيد: المنصة بترجّع للبائع العمولة اللي أخدتها
             لما البيعة ترجع. */}
-        <KpiCard title="عمولات مرتجعة للبائعين" value={<Money value={b.refunds} />}
-          hint="بتتخصم من رصيد المنصة" icon={<Undo2 size={20} />} tone="red" />
+        <KpiCard
+          title="عمولات مرتجعة للبائعين"
+          value={<Money value={b.refunds} />}
+          hint={
+            b.refundsDue + b.refundsHeld > 0
+              ? `المقيّد في الفترة. الإجمالي مع المستحق والمحجوز = ${(
+                  b.totalRefunds + b.refundsDue + b.refundsHeld
+                ).toFixed(3)} د.ك — نفس «١٤ · الرسوم المعادة» في الإحصائيات`
+              : 'بتتخصم من رصيد المنصة'
+          }
+          icon={<Undo2 size={20} />}
+          tone="red"
+        />
         <KpiCard title="صافي الفترة" value={<Money value={b.periodNet} />}
           icon={<TrendingUp size={20} />} tone="navy" />
       </div>
@@ -205,6 +250,40 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
             </Btn>
             <Btn variant="ghost" onClick={() => setOpen(false)}>إلغاء</Btn>
           </div>
+        </Modal>
+      )}
+
+      {wallets && (
+        <Modal title="أصحاب الأرصدة" open onClose={() => setWallets(false)}>
+          <p className="mb-3 text-sm text-subtext">
+            كل محفظة فيها رصيد دلوقتي. المجموع <Money value={b.customerFunds} /> — وده هو
+            نفس رقم «أموال العملاء المحتجزة».
+          </p>
+          {owners.isLoading ? (
+            <Spinner />
+          ) : owners.isError ? (
+            <ErrorState
+              message={(owners.error as Error)?.message ?? 'تعذر تحميل الأرصدة'}
+              onRetry={() => owners.refetch()}
+            />
+          ) : (owners.data ?? []).length === 0 ? (
+            <p className="py-4 text-center text-sm text-subtext">مافيش محافظ فيها رصيد</p>
+          ) : (
+            <div className="divide-y divide-line">
+              {(owners.data ?? []).map((w) => (
+                <div key={w.walletId} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate font-medium">{w.name}</span>
+                  <span className="shrink-0 rounded-md bg-surface px-1.5 py-0.5 text-[11px] text-subtext ring-1 ring-line">
+                    {w.side === 'seller' ? 'بائع' : 'مشتري'}
+                  </span>
+                  {w.lastTxnAt && (
+                    <span className="shrink-0 text-xs text-subtext">{fmtDate(w.lastTxnAt)}</span>
+                  )}
+                  <span className="shrink-0 font-medium"><Money value={w.balance} /></span>
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
 

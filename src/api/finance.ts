@@ -73,6 +73,8 @@ export async function fetchFinanceReturns(q: {
   from: string | null;
   to: string | null;
   search: string;
+  /** مجموعة الحالة زي صفحة المرتجعات — 'all' أو مفتاح من `RETURN_STATUS_FILTERS`. */
+  status: string;
   page: number;
   pageSize: number;
 }): Promise<FinanceReturns> {
@@ -82,6 +84,7 @@ export async function fetchFinanceReturns(q: {
     p_search: q.search.trim() || null,
     p_limit: q.pageSize,
     p_offset: q.page * q.pageSize,
+    p_status: q.status,
   });
   const rows = (r.rows ?? []) as Record<string, unknown>[];
   const s = (r.summary ?? {}) as Record<string, unknown>;

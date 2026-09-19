@@ -16,6 +16,13 @@ export type ReturnRow = {
   location: Loc | null;
   reasonText: string | null;
   refundAmount: number;
+  /**
+   * العمولة اللي المنصة بترجّعها للبائع على السند ده — نفس مصدر كارت «الرسوم
+   * المعادة للبائعين»، فمجموع العمود بيساوي الكارت.
+   */
+  feeRefund: number;
+  /** false = القيمة دي تقدير على سند ما خلصش، لسه ما اتقيّدتش في الدفاتر. */
+  feePosted: boolean;
   requestedAt: string;
   /** null = الفلوس لسه ما رجعتش للعميل. شوف `isRefundPending` في `labels.ts`. */
   refundedAt: string | null;
@@ -77,6 +84,8 @@ export async function fetchReturns(q: ReturnsQuery): Promise<{ rows: ReturnRow[]
       location: toLoc(x.location),
       reasonText: (x.reason_text as string | null) ?? null,
       refundAmount: num(x.refund_amount),
+      feeRefund: num(x.fee_refund),
+      feePosted: x.fee_posted === true,
       requestedAt: String(x.requested_at),
       refundedAt: (x.refunded_at as string | null) ?? null,
     })),
@@ -105,42 +114,9 @@ export async function fetchReturnsStats(from: string | null, to: string | null):
   };
 }
 
-// ---------- إجراءات المرتجع ------------------------------------------------
-// دلوقتي القرار مش بيقيّد الرصيد — القيد بقى عند الاستلام (receive_return)،
-// عشان المشتري ما ياخدش القيمة قبل ما البضاعة ترجع فعلًا.
 
-async function callRpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.rpc(fn as never, args as never);
-  if (error) throw new Error(arError(error));
-  return data as T;
-}
+// `decideReturn` و`receiveReturn` اتشالوا من اللوحة: القرار على البنود
+// وتعليم استلام البضاعة الاتنين بيحصلوا في مخزن البائع ومن تطبيقه. الداتابيز
+// لسه بتسمح للأدمن بيهم (`decide_return` / `receive_return`) كمخرج للدعم،
+// بس مفيش زرار في اللوحة بينده عليهم.
 
-export type ReturnDecision = {
-  returnItemId: string;
-  qtyAccepted: number;
-  qtyRejected: number;
-  rejectionReason?: string | null;
-};
-
-/** قرار البائع/الأدمن على بنود السند. مابيقيّدش رصيد — بس بيحدد المقبول والمرفوض. */
-export async function decideReturn(
-  returnId: string,
-  decisions: ReturnDecision[],
-  rejectionReason?: string | null,
-) {
-  return callRpc('decide_return', {
-    p_return_id: returnId,
-    p_decisions: decisions.map((d) => ({
-      return_item_id: d.returnItemId,
-      qty_accepted: d.qtyAccepted,
-      qty_rejected: d.qtyRejected,
-      rejection_reason: d.rejectionReason ?? null,
-    })),
-    p_rejection_reason: rejectionReason ?? null,
-  });
-}
-
-/** استلام البضاعة فعليًا ⇒ عندها بس بيتقيّد المبلغ في محفظة المشتري. */
-export async function receiveReturn(returnId: string) {
-  return callRpc('receive_return', { p_return_id: returnId });
-}
