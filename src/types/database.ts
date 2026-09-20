@@ -2207,14 +2207,14 @@ export type Database = {
           created_at: string
           description_ar: string | null
           id: string
-          images: string[]
-          name_ar: string
+          images: string[] | null
+          name_ar: string | null
           name_en: string | null
           origin_country: string | null
           seller_id: string
           specialty_id: string
           status: string
-          unit_id: string
+          unit_id: string | null
           updated_at: string
         }
         Insert: {
@@ -2224,14 +2224,14 @@ export type Database = {
           created_at?: string
           description_ar?: string | null
           id?: string
-          images: string[]
-          name_ar: string
+          images?: string[] | null
+          name_ar?: string | null
           name_en?: string | null
           origin_country?: string | null
           seller_id: string
           specialty_id: string
           status?: string
-          unit_id: string
+          unit_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -2241,14 +2241,14 @@ export type Database = {
           created_at?: string
           description_ar?: string | null
           id?: string
-          images?: string[]
-          name_ar?: string
+          images?: string[] | null
+          name_ar?: string | null
           name_en?: string | null
           origin_country?: string | null
           seller_id?: string
           specialty_id?: string
           status?: string
-          unit_id?: string
+          unit_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2820,6 +2820,7 @@ export type Database = {
           refunded_at: string | null
           rejection_reason: string | null
           requested_at: string
+          return_delivery_fee: number
           return_number: string
           seller_company_id: string
           seller_decided_at: string | null
@@ -2846,6 +2847,7 @@ export type Database = {
           refunded_at?: string | null
           rejection_reason?: string | null
           requested_at?: string
+          return_delivery_fee?: number
           return_number: string
           seller_company_id: string
           seller_decided_at?: string | null
@@ -2872,6 +2874,7 @@ export type Database = {
           refunded_at?: string | null
           rejection_reason?: string | null
           requested_at?: string
+          return_delivery_fee?: number
           return_number?: string
           seller_company_id?: string
           seller_decided_at?: string | null
@@ -4796,6 +4799,7 @@ export type Database = {
       decide_return: {
         Args: {
           p_decisions: Json
+          p_delivery_fee?: number
           p_rejection_reason?: string
           p_return_id: string
         }
@@ -4817,6 +4821,7 @@ export type Database = {
           refunded_at: string | null
           rejection_reason: string | null
           requested_at: string
+          return_delivery_fee: number
           return_number: string
           seller_company_id: string
           seller_decided_at: string | null
@@ -5105,6 +5110,7 @@ export type Database = {
           amount_due: unknown
           credit_balance: unknown
           period_sales: unknown
+          net_sales: unknown
           returns_credit: unknown
           total_sales: unknown
         }[]
@@ -5505,6 +5511,7 @@ export type Database = {
       seller_return_detail: {
         Args: { p_return_id: string }
         Returns: {
+          buyer_accepted: boolean
           buyer_address: string
           buyer_code: string
           buyer_email: string
@@ -5513,6 +5520,7 @@ export type Database = {
           buyer_logo_url: string
           buyer_phone: string
           buyer_register: string
+          buyer_responded_at: string
           buyer_tax_number: string
           decided_at: string
           id: string
@@ -5526,6 +5534,7 @@ export type Database = {
           reason_label: string
           reason_text: string
           refund_amount: unknown
+          return_delivery_fee: unknown
           refunded_at: string
           rejection_reason: string
           requested_at: string

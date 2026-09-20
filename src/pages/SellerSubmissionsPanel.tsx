@@ -13,14 +13,28 @@ import { productSubmissionStatusLabels, labelOf } from '../lib/labels';
 import { sellerSubmissionSections } from '../lib/materials-requests';
 import { nextStatuses, type SubmissionStatus } from '../lib/submission-status';
 
+/**
+ * عنوان الطلب.
+ *
+ * شاشة البائع رجعت لنص فريم «اضافة منتج جديد»: قسم بس من غير اسم. فالطلب
+ * اللي مالوش اسم بيتعنون بقسمه — من غير كده الصف كان هيبان فاضي والأدمن
+ * مش عارف هو إيه.
+ */
+function titleOf(row: { name_ar: string | null; specialty: { name_ar: string } | null }) {
+  const name = row.name_ar?.trim();
+  if (name) return name;
+  return row.specialty?.name_ar ? `طلب مادة في «${row.specialty.name_ar}»` : 'طلب مادة';
+}
+
 export type SubmissionRow = {
   id: string;
-  name_ar: string;
+  /** null = طلب بقسم بس — شاشة البائع بتبعت القسم لوحده (فريم 1006:131). */
+  name_ar: string | null;
   name_en: string | null;
   description_ar: string | null;
   brand: string | null;
   origin_country: string | null;
-  images: string[];
+  images: string[] | null;
   status: string;
   admin_note: string | null;
   created_at: string;
@@ -148,7 +162,7 @@ export function SellerSubmissionsPanel() {
                     {row.images?.[0] && <img src={row.images[0]} alt="" className="size-full object-cover" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-primary">{row.name_ar}</div>
+                    <div className="truncate font-medium text-primary">{titleOf(row)}</div>
                     <div className="truncate text-xs text-subtext">{row.seller?.full_name ?? '—'}</div>
                     <div className="mt-1 flex items-center gap-2">
                       <StatusChip label={l.label} tone={l.tone} />
@@ -187,7 +201,7 @@ export function SellerSubmissionsPanel() {
       <ConfirmDialog
         open={!!deleting}
         title="حذف الاقتراح من القايمة"
-        message={`«${deleting?.name_ar ?? ''}» هيتشال من الشاشة. القرار اللي اتاخد عليه بيفضل محفوظ في سجل التدقيق، والمادة لو اتضافت للكتالوج مش هتتأثر.`}
+        message={`«${deleting ? titleOf(deleting) : ''}» هيتشال من الشاشة. القرار اللي اتاخد عليه بيفضل محفوظ في سجل التدقيق، والمادة لو اتضافت للكتالوج مش هتتأثر.`}
         confirmLabel="حذف"
         danger
         busy={remove.isPending}
@@ -214,7 +228,7 @@ function SellerDetail({ row, onDecide, onDelete }: {
     <Card className="min-w-0 flex-1 p-5">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-primary">{row.name_ar}</h2>
+          <h2 className="text-lg font-bold text-primary">{titleOf(row)}</h2>
           <p className="mt-1 text-xs text-subtext">كل المعلومات اللي البائع بعتها في الفورم</p>
         </div>
         <StatusChip
@@ -223,15 +237,15 @@ function SellerDetail({ row, onDecide, onDelete }: {
         />
       </div>
 
-      {row.images?.length > 0 && (
+      {(row.images?.length ?? 0) > 0 && (
         <div className="mb-5">
           <p className="mb-2 text-sm font-medium text-primary">صورة المنتج</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {row.images.map((src) => (
+            {(row.images ?? []).map((src) => (
               <img
                 key={src}
                 src={src}
-                alt={row.name_ar}
+                alt={titleOf(row)}
                 className="max-h-64 w-full rounded-xl bg-surface object-contain ring-1 ring-line"
               />
             ))}
@@ -304,7 +318,7 @@ function DecideModal({ row, to, busy, onClose, onSubmit }: {
 }) {
   const [note, setNote] = useState('');
   return (
-    <Modal title={`${DECISION_LABELS[to]} — ${row.name_ar}`} open onClose={onClose}>
+    <Modal title={`${DECISION_LABELS[to]} — ${titleOf(row)}`} open onClose={onClose}>
       <div className="space-y-4">
         {to === 'approved' && (
           <p className="text-xs text-subtext">

@@ -5,7 +5,8 @@
 // الشارة في القايمة الجانبية بقت اقتراحات البائعين المفتوحة بس.
 
 export type SellerSubmissionFields = {
-  name_ar: string;
+  /** بيقبل فاضي: شاشة البائع بقت «قسم بس»، والعنوان بيتشتق من القسم. */
+  name_ar: string | null;
   name_en: string | null;
   description_ar: string | null;
   brand: string | null;
