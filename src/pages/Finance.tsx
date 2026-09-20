@@ -348,7 +348,11 @@ function ReturnsTab({ range }: { range: DateRange }) {
     {
       key: 'fees',
       header: 'الرسوم المعادة للبائع',
-      render: (r) => (r.feesRefunded > 0 ? <Money value={r.feesRefunded} /> : '—'),
+      // المبلغ بيتقيّد ساعة ما البائع يأكد الاستلام. قبل كده الخانة فاضية عن
+      // قصد: المنصة ما دفعتش حاجة لسه، وعرض تقدير هنا بيتقري كأنه اتحوّل.
+      render: (r) => (r.feesRefunded > 0 ? <Money value={r.feesRefunded} /> : (
+        <span className="text-subtext" title="بترجع للبائع لما يأكد استلام البضاعة المرتجعة">—</span>
+      )),
     },
     {
       key: 'status',
@@ -390,7 +394,7 @@ function ReturnsTab({ range }: { range: DateRange }) {
         />
         {/* نفس مفاتيح صفحة المرتجعات: الفلتر على مجموعة الحالة، فـ«مقبول»
             معناها واحد في الشاشتين. والكروت فوق بتتبع الفلتر. */}
-        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
+        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-60">
           <option value="all">كل الحالات</option>
           {RETURN_STATUS_FILTERS.map(([k, label]) => (
             <option key={k} value={k}>{label}</option>
@@ -538,7 +542,7 @@ function StatsTab({ range }: { range: DateRange }) {
           <KpiCard
             title="١٤ · الرسوم المعادة للبائعين"
             value={m(d?.feesRefunded)}
-            hint="المقيّد + المستحق على مرتجعات خلصت + المحجوز لمرتجعات جارية — التفصيل في تاب «٦. رصيد المنصة»"
+            hint="اللي اترد فعلًا لما البائع أكد استلام البضاعة — المرتجعات اللي لسه ماشية مش محسوبة هنا"
             icon={<Undo2 size={20} />}
             tone="red"
           />

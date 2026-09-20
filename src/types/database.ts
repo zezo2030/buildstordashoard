@@ -713,6 +713,67 @@ export type Database = {
           },
         ]
       }
+      credit_settlements: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          method: string
+          note: string | null
+          order_id: string
+          reference: string | null
+          seller_company_id: string
+          settled_on: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          method: string
+          note?: string | null
+          order_id: string
+          reference?: string | null
+          seller_company_id: string
+          settled_on?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          method?: string
+          note?: string | null
+          order_id?: string
+          reference?: string | null
+          seller_company_id?: string
+          settled_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_settlements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_settlements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_settlements_seller_company_id_fkey"
+            columns: ["seller_company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_fee_rules: {
         Row: {
           area: string | null
@@ -4793,7 +4854,7 @@ export type Database = {
         }
         Returns: string
       }
-      pay_seller_subscription_from_wallet: { Args: never; Returns: Json }
+      pay_seller_subscription_from_balance: { Args: never; Returns: Json }
       pay_subscription_from_wallet: { Args: never; Returns: Json }
       place_order: {
         Args: {
@@ -4818,6 +4879,8 @@ export type Database = {
         Returns: Json
       }
       preview_draft_quotation: { Args: never; Returns: Json }
+      seller_refund_buyer: { Args: { p_return_id: string }; Returns: Json }
+      seller_return_refund_due: { Args: { p_return_id: string }; Returns: Json }
       receive_return: {
         Args: { p_return_id: string }
         Returns: {
@@ -5038,11 +5101,12 @@ export type Database = {
           bank_holder: string
           bank_iban: string
           bank_name: string
+          account_balance: unknown
+          amount_due: unknown
           credit_balance: unknown
           period_sales: unknown
           returns_credit: unknown
           total_sales: unknown
-          wallet_balance: unknown
         }[]
       }
       seller_buyer_companies: {
@@ -5111,6 +5175,7 @@ export type Database = {
           total_count: number
         }[]
       }
+      seller_credit_open_orders: { Args: never; Returns: Json }
       seller_dashboard_summary: {
         Args: never
         Returns: {
@@ -5614,6 +5679,16 @@ export type Database = {
       seller_set_product_active: {
         Args: { p_is_active: boolean; p_seller_product_id: string }
         Returns: boolean
+      }
+      seller_settle_credit_order: {
+        Args: {
+          p_date?: string
+          p_method?: string
+          p_note?: string
+          p_order_id: string
+          p_reference?: string
+        }
+        Returns: Json
       }
       seller_specialty_summary: {
         Args: never

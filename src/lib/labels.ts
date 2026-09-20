@@ -79,6 +79,11 @@ export const returnStatusLabels: LabelMap = {
 export const RETURN_STATUS_FILTERS: [string, string][] = [
   ['submitted', 'تم تقديمه'],
   ['accepted', 'مقبول'],
+  // مش مجموعة حالة زي التلاتة التانية: دي شريحة جوّه «مقبول» بتقطعها
+  // بـ`refunded_at`. أهم صف في الشاشة — المشتري مستني فلوسه — وماكانش
+  // فيه طريقة تشوفهم كلهم مع بعض. النظير في الداتابيز
+  // `app.return_awaiting_refund()`.
+  ['awaiting_refund', 'الفلوس لسه ما رجعتش للمشتري'],
   ['rejected', 'رفض من البائع'],
   ['cancelled', 'رفض من المشتري'],
 ];

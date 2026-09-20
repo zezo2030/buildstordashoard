@@ -88,16 +88,13 @@ export default function Returns() {
       } },
     { key: 'refund', header: 'مبلغ الفاتورة', sortKey: 'refund_amount',
       render: (r) => <Money value={r.refundAmount} /> },
-    // حركتين مختلفتين على نفس السند: دي للمشتري ودي للبائع. التقدير بيتعلّم
-    // عشان ما يتقريش كأنه فلوس اتحوّلت خلاص.
+    // حركتين مختلفتين على نفس السند: دي للمشتري ودي للبائع. العمولة بترجع
+    // ساعة ما البائع يأكد استلام البضاعة، فقبل كده الخانة فاضية — المنصة ما
+    // دفعتش حاجة، وعرض تقدير هنا بيتقري كأنه فلوس اتحوّلت.
     { key: 'fee', header: 'الرسوم المعادة للبائع',
-      render: (r) => (r.feeRefund > 0 ? (
-        <span className={r.feePosted ? undefined : 'text-subtext'}
-          title={r.feePosted ? undefined : 'تقدير — السند لسه ما خلصش والقيد ما اتعملش'}>
-          <Money value={r.feeRefund} />
-          {!r.feePosted && ' (متوقع)'}
-        </span>
-      ) : <span className="text-subtext">—</span>) },
+      render: (r) => (r.feeRefund > 0
+        ? <Money value={r.feeRefund} />
+        : <span className="text-subtext" title="بترجع للبائع لما يأكد استلام البضاعة المرتجعة">—</span>) },
     { key: 'at', header: 'التاريخ', sortKey: 'requested_at',
       render: (r) => <span className="text-xs">{fmtDateTime(r.requestedAt)}</span> },
   ];
@@ -126,12 +123,11 @@ export default function Returns() {
             icon={<Wallet size={20} />} tone="red" />
           <KpiCard title="عدد المرتجعات" value={s ? s.nReturns : '…'} icon={<Undo2 size={20} />} tone="navy" />
           <KpiCard title="عدد المواد المرتجعة" value={s ? s.nItems : '…'} icon={<Package size={20} />} tone="blue" />
-          {/* الرسوم اللي المنصة رجّعتها للبائع على المواد المرتجعة — البائع
-              اللي على اشتراك ثابت مالوش استرداد لأنه مادفعش عمولة أصلاً.
-              الرقم بيشمل تقدير للسندات اللي لسه ما اتصرفتش، فمش دايمًا = نسبة
-              العمولة × «المسترد فعليًا». التفصيل في المال ‹ ٦. رصيد المنصة. */}
+          {/* الرسوم اللي المنصة رجّعتها للبائع فعلًا — البائع اللي على اشتراك
+              ثابت مالوش استرداد لأنه مادفعش عمولة أصلاً. السندات اللي لسه
+              جارية مش داخلة: العمولة بترجع ساعة ما البائع يأكد الاستلام. */}
           <KpiCard title="الرسوم المعادة للبائعين" value={s ? <Money value={s.feesRefunded} /> : '…'}
-            hint="على مبلغ الفاتورة بعد الخصم — ويشمل تقدير للسندات اللي لسه جارية"
+            hint="اللي اترد فعلًا لما البائع أكد الاستلام — على مبلغ الفاتورة بعد الخصم"
             icon={<Undo2 size={20} />} tone="green" />
         </div>
       )}
@@ -143,7 +139,7 @@ export default function Returns() {
           onChange={(e) => setSearch(e.target.value)}
           className="w-72"
         />
-        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-44">
+        <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} className="w-60">
           <option value="all">كل الحالات</option>
           {RETURN_STATUS_FILTERS.map(([k, label]) => (
             <option key={k} value={k}>{label}</option>

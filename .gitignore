@@ -29,3 +29,6 @@ dist-ssr
 
 # Supabase CLI local state
 supabase/.temp/
+
+# نسخة الـSupabase CLI المحلية — الهجرات الحقيقية في docs/buildstoresupabase/
+supabase/

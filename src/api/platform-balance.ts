@@ -5,13 +5,9 @@
 //
 //     + عمولات الطلبات + الاشتراكات − عمولات المرتجعات − المسحوب للبنك
 //
-// و«عمولات المرتجعات» تلات أرقام مش رقم:
-//   `totalRefunds`  اللي اتقيّد فعلًا في `platform_fees`
-//   `refundsDue`    مرتجعات خلصت والفلوس راحت للمشتري، والعمولة لسه ما رجعتش
-//   `refundsHeld`   مرتجعات لسه جارية — محجوزة لحد ما تخلص
-// التلاتة بيتخصموا من `balance`، ومجموعهم = «١٤ · الرسوم المعادة» في تاب
-// الإحصائيات. قبل كده الرصيد كان بيخصم الأول بس، فكان بيسمح بسحب فلوس
-// المنصة مش بتاعتها.
+// و«عمولات المرتجعات» = اللي اترد فعلًا في `platform_fees` وبس. العمولة
+// بترجع للبائع ساعة ما يأكد استلام البضاعة المرتجعة، فقبل كده المنصة ما
+// دفعتش حاجة والفلوس متاحة. نفس الرقم في «١٤ · الرسوم المعادة» بالإحصائيات.
 //
 // و«السحب» تسجيل لتحويل بنكي حصل بره النظام، مش أمر تحويل — عشان كده مفيش
 // حالات ولا موافقات زي طلبات سحب البائعين.
@@ -27,10 +23,6 @@ export type PlatformBalance = {
   totalCommission: number;
   totalSubscriptions: number;
   totalRefunds: number;
-  /** مرتجعات خلصت وعمولتها ما رجعتش للبائع — دَين مستحق مش ربح. */
-  refundsDue: number;
-  /** مرتجعات لسه جارية — محجوزة من الرصيد لحد ما تخلص. */
-  refundsHeld: number;
   totalIncome: number;
   withdrawn: number;
   balance: number;
@@ -78,8 +70,6 @@ export async function fetchPlatformBalance(
     totalCommission: num(r.total_commission),
     totalSubscriptions: num(r.total_subscriptions),
     totalRefunds: num(r.total_refunds),
-    refundsDue: num(r.refunds_due),
-    refundsHeld: num(r.refunds_held),
     totalIncome: num(r.total_income),
     withdrawn: num(r.withdrawn),
     balance: num(r.balance),
@@ -91,7 +81,7 @@ export async function fetchPlatformBalance(
   };
 }
 
-/** صاحب كل محفظة فيها رصيد — «أموال العملاء» رقم مجمّع، وده تفصيله. */
+/** صاحب كل رصيد المنصة شايلاه — «أموال العملاء» رقم مجمّع، وده تفصيله. */
 export type CustomerWallet = {
   walletId: string;
   side: 'buyer' | 'seller' | null;
@@ -99,6 +89,11 @@ export type CustomerWallet = {
   ownerId: string;
   name: string;
   balance: number;
+  /**
+   * المشتري فلوسه في محفظة، والبائع رصيده في دفتر الحساب — مفيش محفظة
+   * للبائع أصلًا، حصيلة البيع الأونلاين بتتقيّد في الدفتر على طول.
+   */
+  source: 'wallet' | 'ledger';
   lastTxnAt: string | null;
 };
 
@@ -112,6 +107,7 @@ export async function fetchCustomerWallets(): Promise<CustomerWallet[]> {
     ownerId: String(w.owner_id),
     name: String(w.name),
     balance: num(w.balance),
+    source: w.source === 'ledger' ? 'ledger' : 'wallet',
     lastTxnAt: (w.last_txn_at as string | null) ?? null,
   }));
 }
