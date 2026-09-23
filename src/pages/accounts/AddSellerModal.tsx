@@ -103,7 +103,10 @@ export function AddSellerModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="grid grid-cols-3 gap-3">
-          <Field label="الجوال الأساسي">
+          {/* الرقم ده بيتخزّن في مكانين: رقم تواصل الشركة (بيظهر للمشتري)
+              ورقم دخول صاحب الحساب. التلميح عشان الأدمن يعرف إن اللي بيكتبه
+              هنا هو اللي المورّد هيسجّل بيه الدخول. */}
+          <Field label="الجوال الأساسي" hint="يدخل به المورّد التطبيق">
             <Input dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </Field>
           <Field label="المحافظة">

@@ -165,6 +165,7 @@ export function ImportProductsModal({
           source_code: row.sourceCode,
           name_ar: row.nameAr,
           description_ar: row.descriptionAr,
+          similar_codes: row.similarCodes,
           origin_country: row.originCountry,
           specialty_id: specialtyId,
           category_id: categoryId || null,
@@ -199,6 +200,13 @@ export function ImportProductsModal({
       <div className="space-y-4">
         <p className="text-sm text-subtext">
           حمّل النموذج وعبّي الصفوف: Product Name, Made In, Code, Description, Image. عمود Code خاص بيك، والـ SKU بيتولد منه للعرض في التطبيق. الكود الموجود مسبقاً لا يُضاف.
+        </p>
+        {/* القاعدة دي لازم تبان لللي بيملا الشيت — هي الفرق بين رقم تشابه
+            ووصف بيتعرض للمشتري. */}
+        <p className="text-sm text-subtext">
+          عمود <span dir="ltr">Description</span>: لو كتبت فيه <b>أرقام</b> (مثال <span dir="ltr">14</span> أو <span dir="ltr">14, 16</span>)
+          تتسجّل <b>أرقام تشابه</b> — وكل المواد اللي ليها نفس الرقم بتظهر لبعض في «منتجات مشابهة» في التطبيق.
+          أي نص تاني بيتسجّل وصفًا للمادة.
         </p>
         <Btn type="button" variant="ghost" onClick={downloadProductXlsxTemplate}>
           <Download size={16} />
@@ -292,6 +300,7 @@ export function ImportProductsModal({
               <Stat label="كود موجود" value={plan.skippedDuplicate.length} />
               <Stat label="ناقص اسم/كود" value={plan.skippedInvalid.length} />
               <Stat label="بصور" value={plan.toInsert.filter((r) => r.image).length} />
+              <Stat label="بأرقام تشابه" value={plan.toInsert.filter((r) => r.similarCodes.length > 0).length} />
             </div>
             {preview.length > 0 && (
               <div className="divide-y divide-line overflow-hidden rounded-lg bg-white ring-1 ring-line">
@@ -353,6 +362,15 @@ function PreviewRow({ row }: { row: PlannedProductRow }) {
         <div className="truncate font-medium">{row.nameAr}</div>
         <div className="text-xs text-subtext" dir="ltr">{row.sku}</div>
       </div>
+      {row.similarCodes.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1">
+          {row.similarCodes.map((code) => (
+            <span key={code} className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] text-primary" dir="ltr">
+              {code}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="text-xs text-subtext">{row.originCountry ?? '—'}</div>
     </div>
   );

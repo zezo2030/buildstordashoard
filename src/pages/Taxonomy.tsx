@@ -2,12 +2,13 @@
 // التخصصات الفرعية = جدول categories (parent_id) للحفاظ على توافق الموبايل.
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, FolderOpen, ImagePlus, Package, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowDownAZ, ChevronLeft, FolderOpen, Globe, GripVertical, ImagePlus, Package, Pencil, SeparatorHorizontal, Trash2, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { deleteCatalogProduct } from '../lib/catalog-product-delete';
 import { allSelected, pruneSelection, toggleAll, toggleId } from '../lib/bulk-select';
-import { splitLevelProducts } from '../lib/taxonomy-level';
+import { arrangeLevel, moveTo, shownDividers, splitLevelProducts, type ArrangeBy } from '../lib/taxonomy-level';
 import { skuFromSourceCode } from '../lib/catalog-sku';
+import { sellersOffersLabel } from '../lib/labels';
 import { PageHeader, Btn, Field, Input, Select, Toggle, Card, Spinner, EmptyState } from '../components/ui';
 import { ImportProductsModal } from '../components/ImportProductsModal';
 import { ConfirmDialog, Modal } from '../components/Modal';
@@ -49,8 +50,17 @@ type ProductRow = {
   /** المكان الأساسي للمادة — بيه بنعرف هي بتاعة المستوى ده ولا متحطّطة فيه زيادة */
   specialty_id: string;
   category_id: string | null;
-  /** صف المكان اللي طلّعها في المستوى ده — لازم عشان نقدر نشيلها من هنا بس */
-  product_placements: { id: string; specialty_id: string; category_id: string | null }[];
+  /**
+   * صف المكان اللي طلّعها في المستوى ده — لازم عشان نقدر نشيلها من هنا بس،
+   * و`sort_order` هو ترتيبها جوّه المستوى ده بالذات (ترتيب الأدمن بالسحب).
+   */
+  product_placements: {
+    id: string; specialty_id: string; category_id: string | null; sort_order: number;
+    /** خط فاصل فوق المادة في المستوى ده — التطبيق بيرسمه في نفس المكان. */
+    divider_before: boolean;
+  }[];
+  /** عدد عروض البائعين على المادة — العدّ في الداتابيز مش صفوف بترجع. */
+  seller_products: { count: number }[];
 };
 
 type Crumb = { kind: 'root' } | { kind: 'specialty'; id: string; name_ar: string } | { kind: 'category'; id: string; name_ar: string };
@@ -143,6 +153,30 @@ export default function Taxonomy() {
   );
 }
 
+/** عدد عروض البائعين على المادة — `seller_products(count)` بترجع صف واحد فيه العدّ. */
+function sellersOf(p: ProductRow): number {
+  return p.seller_products?.[0]?.count ?? 0;
+}
+
+/**
+ * «عند كام بائع» جنب اسم المادة.
+ *
+ * نفس رقم «عروض البائعين» في شاشة المنتجات (كل العروض، المفعّل والموقوف) —
+ * المالك كان لازم يفتح الشاشة التانية عشان يعرف المادة دي بتتباع عند مين.
+ */
+function SellersChip({ count }: { count: number }) {
+  return (
+    <span
+      title="عدد عروض البائعين على المادة، بما فيها الموقوف — نفس الرقم في شاشة المنتجات"
+      className={`shrink-0 rounded-md bg-white px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-line ${
+        count > 0 ? 'text-primary' : 'text-subtext'
+      }`}
+    >
+      {sellersOffersLabel(count)}
+    </span>
+  );
+}
+
 function TaxonomyBrowser() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -166,6 +200,14 @@ function TaxonomyBrowser() {
   // المادة الموقوفة بتختفي من المستوى، فكان لازم تخرج من الصفحة دي عشان
   // ترجّعها. المفتاح ده بيوريها في مكانها عشان ترجّعها من نفس السطر.
   const [showStopped, setShowStopped] = useState(false);
+  // ترتيب السحب — بيتمسك محليًا لحد ما الخادم يردّ عشان السطر ما يرجعش
+  // لمكانه القديم قدام العين. متخزّن بمفتاح المستوى: لو الأدمن دخل مستوى
+  // تاني الترتيب القديم مايتطبّقش عليه.
+  const [dragOrder, setDragOrder] = useState<{ key: string; ids: string[] } | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  // ترتيب أوتوماتيك بالاسم أو بالمنشأ — بيستنى تأكيد لأنه بيمسح ترتيب السحب.
+  const [arranging, setArranging] = useState<ArrangeBy | null>(null);
 
   const current = path[path.length - 1]!;
   const specialtyCrumb = path.find((c): c is Extract<Crumb, { kind: 'specialty' }> => c.kind === 'specialty');
@@ -213,7 +255,9 @@ function TaxonomyBrowser() {
         .select(
           'id, sku, source_code, name_ar, origin_country, brand, images, is_active, unit_id,' +
           ' specialty_id, category_id, unit:units (name_ar),' +
-          ' product_placements!inner (id, specialty_id, category_id)',
+          // `seller_products(count)` عدّ في الداتابيز — الصفوف نفسها مش بترجع.
+          ' product_placements!inner (id, specialty_id, category_id, sort_order, divider_before),' +
+          ' seller_products (count)',
         )
         .eq('product_placements.specialty_id', specialtyId!)
         .order('name_ar');
@@ -222,7 +266,13 @@ function TaxonomyBrowser() {
         : q.is('product_placements.category_id', null);
       const { data, error } = await q;
       if (error) throw new Error(arError(error));
-      return data as unknown as ProductRow[];
+      // الترتيب بترتيب الأدمن — PostgREST مابيرتّبش الأب بعمود من جدول متعدد،
+      // فالفرز هنا. الاسم فاصل التعادل عشان الترتيب ما يرقصش بين فتحتين.
+      return (data as unknown as ProductRow[]).sort(
+        (a, b) =>
+          (a.product_placements[0]?.sort_order ?? 0) - (b.product_placements[0]?.sort_order ?? 0) ||
+          a.name_ar.localeCompare(b.name_ar, 'ar'),
+      );
     },
   });
 
@@ -302,6 +352,67 @@ function TaxonomyBrowser() {
       qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
       qc.invalidateQueries({ queryKey: ['products'] });
       qc.invalidateQueries({ queryKey: ['catalog-tree'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
+
+  // ترتيب مواد المستوى بالسحب. بيتبعت المستوى **كامل** مرة واحدة: الدالة
+  // بترفض أي مادة مش في المستوى ده، فالحفظ يا يتم كله يا يفشل كله — مفيش
+  // ترتيب نص نص. ونفس الترتيب هو اللي المشتري بيشوفه في التطبيق.
+  const reorderProducts = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.rpc('admin_reorder_level_products' as never, {
+        p_specialty: specialtyId,
+        p_category: categoryCrumb?.id ?? null,
+        p_product_ids: ids,
+      } as never);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      toast('success', 'تم حفظ الترتيب');
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['catalog-tree'] });
+    },
+    // الترتيب المحلي بيتلغي عشان الشاشة ترجع لترتيب الخادم بدل ما تفضل
+    // مورّية ترتيب مااتحفظش.
+    onError: (e) => { setDragOrder(null); toast('error', (e as Error).message); },
+  });
+
+  // ترتيب المستوى كله بالاسم أو بالمنشأ في عملية واحدة مع فواصله — بالمنشأ
+  // بيحط خط فوق أول مادة في كل منشأ، وبالاسم بيشيل الفواصل (المجموعات اتفكّت).
+  const arrangeProducts = useMutation({
+    mutationFn: async ({ ids, dividerIds }: { key: string; ids: string[]; dividerIds: string[] }) => {
+      const { error } = await supabase.rpc('admin_arrange_level_products', {
+        p_specialty: specialtyId!,
+        p_category: categoryCrumb?.id ?? null,
+        p_product_ids: ids,
+        p_divider_ids: dividerIds,
+      });
+      if (error) throw new Error(arError(error));
+    },
+    onMutate: ({ key, ids }) => setDragOrder({ key, ids }),
+    onSuccess: () => {
+      toast('success', 'تم ترتيب المنتجات');
+      setArranging(null);
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (e) => { setDragOrder(null); toast('error', (e as Error).message); },
+  });
+
+  // الخط الفاصل على مادة واحدة — `update` على صف مكانها في المستوى ده بس.
+  const toggleDivider = useMutation({
+    mutationFn: async ({ placementId, on }: { placementId: string; on: boolean }) => {
+      const { error } = await supabase
+        .from('product_placements')
+        .update({ divider_before: on })
+        .eq('id', placementId);
+      if (error) throw new Error(arError(error));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['taxonomy-products'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -553,10 +664,33 @@ function TaxonomyBrowser() {
   const levelProducts = products ?? [];
   const liveProducts = levelProducts.filter((x) => x.is_active);
   const stoppedCount = levelProducts.length - liveProducts.length;
-  const { own: ownProducts, extra: extraProducts } = splitLevelProducts(
-    showStopped ? levelProducts : liveProducts,
-    level,
+  // ترتيب المستوى كامل — الموقوف المخفي والمواد الإضافية جوّاه كمان، عشان
+  // السحب يحسبهم وما يلخبطش مكانهم لما يترجع يبان.
+  const levelKey = `${specialtyId ?? ''}:${categoryCrumb?.id ?? 'root'}`;
+  const levelOrderIds = dragOrder?.key === levelKey ? dragOrder.ids : levelProducts.map((p) => p.id);
+  const rankOf = new Map(levelOrderIds.map((id, i) => [id, i]));
+  const byRank = (a: ProductRow, b: ProductRow) =>
+    (rankOf.get(a.id) ?? 0) - (rankOf.get(b.id) ?? 0);
+  const split = splitLevelProducts(showStopped ? levelProducts : liveProducts, level);
+  const ownProducts = [...split.own].sort(byRank);
+  const extraProducts = [...split.extra].sort(byRank);
+  // الخط بيترسم زي ما هيبان في التطبيق: لو المادة اللي عليها الفاصل مستخبية
+  // الخط بينزل لأول مادة ظاهرة بعدها.
+  const dividerIds = new Set(
+    levelProducts.filter((p) => p.product_placements[0]?.divider_before).map((p) => p.id),
   );
+  const dividerAbove = shownDividers(levelOrderIds, dividerIds, new Set(ownProducts.map((p) => p.id)));
+
+  /** إفلات سطر فوق سطر — بيعيد ترتيب المستوى كله وبيحفظ على طول. */
+  const dropOnProduct = (targetId: string) => {
+    const dragId = draggingId;
+    setDraggingId(null);
+    setDropTargetId(null);
+    if (!dragId || dragId === targetId) return;
+    const ids = moveTo(levelOrderIds, dragId, targetId);
+    setDragOrder({ key: levelKey, ids });
+    reorderProducts.mutate(ids);
+  };
   // البوابة على المفعّل بس، عشان تطابق `app.assert_taxonomy_xor_for_branch`
   // اللي بيشرط `p.is_active` — المادة الموقوفة مابتمنعش إضافة قسم.
   const gate = splitLevelProducts(liveProducts, level);
@@ -709,7 +843,10 @@ function TaxonomyBrowser() {
                       <div key={p.id} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80">
                         <Thumb url={p.images?.[0] ?? null} tone="accent" empty="package" />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium text-primary">{p.name_ar}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-medium text-primary">{p.name_ar}</span>
+                            <SellersChip count={sellersOf(p)} />
+                          </div>
                           <div className="text-xs text-subtext" dir="ltr">{p.sku}</div>
                         </div>
                         {hasBranches && (
@@ -796,6 +933,23 @@ function TaxonomyBrowser() {
                         </Btn>
                       </>
                     )}
+                    {selected.length === 0 && ownProducts.length > 1 && (
+                      <>
+                        <span className="flex items-center gap-1 text-xs text-subtext">
+                          <GripVertical size={13} /> اسحب من هنا عشان ترتّب المنتجات — نفس الترتيب
+                          اللي المشتري بيشوفه في التطبيق
+                        </span>
+                        <span className="ms-auto flex items-center gap-1.5 text-xs text-subtext">
+                          ترتيب تلقائي:
+                          <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setArranging('name')}>
+                            <ArrowDownAZ size={14} /> بالاسم
+                          </Btn>
+                          <Btn variant="ghost" className="px-2.5 py-1 text-xs" onClick={() => setArranging('origin')}>
+                            <Globe size={14} /> بالمنشأ
+                          </Btn>
+                        </span>
+                      </>
+                    )}
                   </div>
                 )}
                 {ownProducts.length === 0 ? (
@@ -811,12 +965,55 @@ function TaxonomyBrowser() {
                 ) : (
                   <div className="divide-y divide-line">
                     {ownProducts.map((p) => (
+                      <div key={p.id}>
+                      {dividerAbove.has(p.id) && (
+                        <div className="flex items-center gap-2 px-4 py-1" aria-label="خط فاصل">
+                          <span className="h-0.5 flex-1 rounded bg-danger/70" />
+                          <span className="text-[11px] text-danger">خط فاصل</span>
+                          <span className="h-0.5 flex-1 rounded bg-danger/70" />
+                        </div>
+                      )}
                       <div
-                        key={p.id}
+                        // السطر كله هدف للإفلات، بس السحب من المقبض بس —
+                        // عشان تحديد المنتجات والدوس على الأزرار مايتحوّلش
+                        // لسحب بالغلط. و`stopPropagation` عشان الإفلات ما
+                        // يوصلش لمنطقة رفع الإكسل اللي حواليه.
+                        onDragOver={(e) => {
+                          if (!draggingId) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setDropTargetId(p.id);
+                        }}
+                        onDrop={(e) => {
+                          if (!draggingId) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          dropOnProduct(p.id);
+                        }}
                         className={`flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface/80${
                           p.is_active ? '' : ' bg-surface/40'
+                        }${draggingId === p.id ? ' opacity-50' : ''}${
+                          dropTargetId === p.id && draggingId && draggingId !== p.id
+                            ? ' ring-2 ring-inset ring-accent'
+                            : ''
                         }`}
                       >
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            e.stopPropagation();
+                            e.dataTransfer.effectAllowed = 'move';
+                            // فايرفوكس مابيبدأش السحب من غير بيانات.
+                            e.dataTransfer.setData('text/plain', p.id);
+                            setDraggingId(p.id);
+                          }}
+                          onDragEnd={() => { setDraggingId(null); setDropTargetId(null); }}
+                          title="اسحب لترتيب المنتج"
+                          aria-label={`ترتيب ${p.name_ar}`}
+                          className="shrink-0 cursor-grab p-1 text-subtext hover:text-primary active:cursor-grabbing"
+                        >
+                          <GripVertical size={15} />
+                        </span>
                         <input
                           type="checkbox"
                           aria-label={`تحديد ${p.name_ar}`}
@@ -835,12 +1032,44 @@ function TaxonomyBrowser() {
                                 موقوف
                               </span>
                             )}
+                            <SellersChip count={sellersOf(p)} />
                           </div>
-                          <div className="text-xs text-subtext" dir="ltr">
-                            {p.sku}
-                            {p.unit?.name_ar ? ` · ${p.unit.name_ar}` : ''}
+                          <div className="flex flex-wrap items-center gap-x-2 text-xs text-subtext">
+                            <span dir="ltr">
+                              {p.sku}
+                              {p.unit?.name_ar ? ` · ${p.unit.name_ar}` : ''}
+                            </span>
+                            <span>
+                              المنشأ:{' '}
+                              <span className={p.origin_country ? 'font-medium text-primary' : ''}>
+                                {p.origin_country || '—'}
+                              </span>
+                            </span>
                           </div>
                         </div>
+                        {p.product_placements[0] && (
+                          <button
+                            type="button"
+                            className={`rounded-lg p-2 hover:bg-white${
+                              p.product_placements[0].divider_before ? ' text-danger' : ' text-subtext hover:text-primary'
+                            }`}
+                            disabled={toggleDivider.isPending}
+                            onClick={() =>
+                              toggleDivider.mutate({
+                                placementId: p.product_placements[0]!.id,
+                                on: !p.product_placements[0]!.divider_before,
+                              })
+                            }
+                            title={
+                              p.product_placements[0].divider_before
+                                ? 'شيل الخط الفاصل اللي فوق المنتج ده'
+                                : 'حط خط فاصل فوق المنتج ده — بيظهر في التطبيق بين المجموعات'
+                            }
+                            aria-pressed={p.product_placements[0].divider_before}
+                          >
+                            <SeparatorHorizontal size={15} />
+                          </button>
+                        )}
                         {/* المستوى المقسّم مايصحّش يرجع فيه مادة مفعّلة —
                             `t_products_xor` بيرفض، فبنقول السبب قبل الدوسة. */}
                         <Toggle
@@ -870,6 +1099,7 @@ function TaxonomyBrowser() {
                           <Trash2 size={15} />
                         </button>
                       </div>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -878,6 +1108,23 @@ function TaxonomyBrowser() {
           </>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={!!arranging}
+        title={arranging === 'origin' ? 'ترتيب بالمنشأ' : 'ترتيب بالاسم'}
+        message={
+          arranging === 'origin'
+            ? 'المنتجات هتترتب حسب المنشأ (وبالاسم جوّه كل منشأ)، ويتحط خط فاصل بين كل منشأ والتاني في التطبيق. الترتيب اليدوي والفواصل الحالية هيتبدلوا.'
+            : 'المنتجات هتترتب أبجديًا بالاسم والفواصل هتتشال. الترتيب اليدوي الحالي هيتبدل.'
+        }
+        confirmLabel="رتّب"
+        busy={arrangeProducts.isPending}
+        onConfirm={() => {
+          if (!arranging) return;
+          arrangeProducts.mutate({ key: levelKey, ...arrangeLevel(levelProducts, arranging) });
+        }}
+        onClose={() => setArranging(null)}
+      />
 
       <ConfirmDialog
         open={!!removingPlacement}

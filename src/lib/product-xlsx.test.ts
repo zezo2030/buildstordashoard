@@ -10,6 +10,7 @@ import {
   parseCodeColumnXlsx,
   parseProductXlsx,
   planProductImport,
+  splitDescriptionCell,
   type ParsedProductRow,
 } from './product-xlsx';
 
@@ -164,6 +165,33 @@ describe('parseCodeColumnXlsx', () => {
   it('is rejected by the product importer because that still needs the full header row', async () => {
     const bytes = buildCodeColumnXlsxTemplate(['54010111']);
     await expect(parseProductXlsx(bytes)).rejects.toThrow(/Product Name|Made In|نموذج/i);
+  });
+});
+
+describe('splitDescriptionCell', () => {
+  it('الرقم بيبقى رقم تشابه مش وصف', () => {
+    expect(splitDescriptionCell('14')).toEqual({ similarCodes: ['14'], descriptionAr: null });
+  });
+
+  it('كذا رقم في نفس الخانة', () => {
+    expect(splitDescriptionCell('14, 16')).toEqual({ similarCodes: ['14', '16'], descriptionAr: null });
+    expect(splitDescriptionCell('14-16')).toEqual({ similarCodes: ['14', '16'], descriptionAr: null });
+  });
+
+  it('المكرر مرة واحدة', () => {
+    expect(splitDescriptionCell('14 14')).toEqual({ similarCodes: ['14'], descriptionAr: null });
+  });
+
+  it('النص بيفضل وصف — والشيتات القديمة ما تتكسرش', () => {
+    expect(splitDescriptionCell('كابل نحاس معزول 4 مم')).toEqual({
+      similarCodes: [],
+      descriptionAr: 'كابل نحاس معزول 4 مم',
+    });
+  });
+
+  it('الفاضي مالوش لا ده ولا ده', () => {
+    expect(splitDescriptionCell('  ')).toEqual({ similarCodes: [], descriptionAr: null });
+    expect(splitDescriptionCell(null)).toEqual({ similarCodes: [], descriptionAr: null });
   });
 });
 

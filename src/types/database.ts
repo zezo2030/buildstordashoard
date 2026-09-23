@@ -975,6 +975,7 @@ export type Database = {
       discounts: {
         Row: {
           banner_url: string | null
+          free_delivery: boolean
           category_id: string | null
           created_at: string
           ends_at: string | null
@@ -994,6 +995,7 @@ export type Database = {
         }
         Insert: {
           banner_url?: string | null
+          free_delivery?: boolean
           category_id?: string | null
           created_at?: string
           ends_at?: string | null
@@ -1013,6 +1015,7 @@ export type Database = {
         }
         Update: {
           banner_url?: string | null
+          free_delivery?: boolean
           category_id?: string | null
           created_at?: string
           ends_at?: string | null
@@ -1769,6 +1772,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          dues_company_id: string | null
           gateway: string | null
           gateway_ref: string | null
           id: string
@@ -1787,6 +1791,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          dues_company_id?: string | null
           gateway?: string | null
           gateway_ref?: string | null
           id?: string
@@ -1805,6 +1810,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          dues_company_id?: string | null
           gateway?: string | null
           gateway_ref?: string | null
           id?: string
@@ -2047,22 +2053,28 @@ export type Database = {
         Row: {
           category_id: string | null
           created_at: string
+          divider_before: boolean
           id: string
           product_id: string
+          sort_order: number
           specialty_id: string
         }
         Insert: {
           category_id?: string | null
           created_at?: string
+          divider_before?: boolean
           id?: string
           product_id: string
+          sort_order?: number
           specialty_id: string
         }
         Update: {
           category_id?: string | null
           created_at?: string
+          divider_before?: boolean
           id?: string
           product_id?: string
+          sort_order?: number
           specialty_id?: string
         }
         Relationships: [
@@ -2298,6 +2310,7 @@ export type Database = {
           name_en: string | null
           origin_country: string | null
           search_doc: unknown
+          similar_codes: string[]
           sku: string
           source_code: string | null
           specialty_id: string
@@ -2319,6 +2332,7 @@ export type Database = {
           name_en?: string | null
           origin_country?: string | null
           search_doc?: unknown
+          similar_codes?: string[]
           sku: string
           source_code?: string | null
           specialty_id: string
@@ -2340,6 +2354,7 @@ export type Database = {
           name_en?: string | null
           origin_country?: string | null
           search_doc?: unknown
+          similar_codes?: string[]
           sku?: string
           source_code?: string | null
           specialty_id?: string
@@ -2584,6 +2599,7 @@ export type Database = {
         Row: {
           buyer_company_id: string | null
           buyer_id: string
+          compare_dismissed_at: string | null
           created_at: string
           id: string
           issued_at: string | null
@@ -2598,6 +2614,7 @@ export type Database = {
         Insert: {
           buyer_company_id?: string | null
           buyer_id: string
+          compare_dismissed_at?: string | null
           created_at?: string
           id?: string
           issued_at?: string | null
@@ -2612,6 +2629,7 @@ export type Database = {
         Update: {
           buyer_company_id?: string | null
           buyer_id?: string
+          compare_dismissed_at?: string | null
           created_at?: string
           id?: string
           issued_at?: string | null
@@ -4336,6 +4354,23 @@ export type Database = {
         }
         Returns: string
       }
+      admin_arrange_level_products: {
+        Args: {
+          p_category: string | null
+          p_divider_ids: string[]
+          p_product_ids: string[]
+          p_specialty: string
+        }
+        Returns: undefined
+      }
+      admin_reorder_level_products: {
+        Args: {
+          p_category: string | null
+          p_product_ids: string[]
+          p_specialty: string
+        }
+        Returns: undefined
+      }
       admin_reject_seller: {
         Args: { p_note?: string; p_profile_id: string }
         Returns: undefined
@@ -5391,14 +5426,21 @@ export type Database = {
       seller_report_past_orders: {
         Args: { p_from?: string; p_search?: string; p_to?: string }
         Returns: {
+          address_line: string
           buyer_code: string
           buyer_label: string
           delivered_at: string
+          ended_at: string
           grand_total: unknown
+          invoice_id: string
+          invoice_number: string
           items_count: number
           order_id: string
           order_number: string
           placed_at: string
+          recipient_phone: string
+          site_name: string
+          status: Database["public"]["Enums"]["order_status"]
         }[]
       }
       seller_report_products_by_customer: {
@@ -5582,6 +5624,7 @@ export type Database = {
           decided_at: string
           id: string
           items_count: number
+          refund_amount: unknown
           refunded_at: string
           requested_at: string
           requested_value: unknown

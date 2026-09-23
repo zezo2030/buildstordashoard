@@ -13,6 +13,7 @@ import UserDetail from './pages/UserDetail';
 import Products from './pages/Products';
 import Taxonomy from './pages/Taxonomy';
 import Banners from './pages/Banners';
+import DiscountCodes from './pages/DiscountCodes';
 import ProductRequests from './pages/ProductRequests';
 import ProductSubmissions from './pages/ProductSubmissions';
 import Orders from './pages/Orders';
@@ -76,6 +77,7 @@ export default function App() {
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/returns" element={<Returns />} />
               <Route path="/wallets" element={<Wallets />} />
+              <Route path="/discount-codes" element={<DiscountCodes />} />
               <Route path="/finance" element={<Finance />} />
               <Route path="/withdrawals" element={<Navigate to="/wallets" replace />} />
               <Route path="/credit" element={<Navigate to="/" replace />} />

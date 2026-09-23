@@ -81,7 +81,7 @@ export default function Finance() {
       {tab === 'ledger' ? (
         <SellerLedgerTab />
       ) : tab === 'balance' ? (
-        <PlatformBalanceTab range={range} />
+        <PlatformBalanceTab range={range} onOpenLedger={() => setTab('ledger')} />
       ) : tab === 'returns' ? (
         <ReturnsTab range={range} />
       ) : tab === 'stats' ? (

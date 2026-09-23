@@ -18,6 +18,8 @@ export type ProductRow = {
   unitName: string;
   offers: number;
   placements: number;
+  /** أرقام التشابه — المواد اللي بينها رقم مشترك بتظهر لبعض في التطبيق. */
+  similarCodes: string[];
 };
 
 /** شرائح عدد العروض المعروضة في الفلتر — الحدود بتتبعت للداتابيز زي ما هي. */
@@ -90,6 +92,7 @@ export async function fetchProducts(q: ProductsQuery): Promise<{ rows: ProductRo
       unitName: String(x.unit_name ?? ''),
       offers: Number(x.offers ?? 0),
       placements: Number(x.placements ?? 0),
+      similarCodes: Array.isArray(x.similar_codes) ? (x.similar_codes as string[]) : [],
     })),
     total: Number(r.total ?? 0),
   };

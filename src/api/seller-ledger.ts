@@ -27,7 +27,7 @@ export type SellerBalance = {
 
 export type LedgerEntryKind =
   | 'commission' | 'sale_proceeds' | 'commission_refund' | 'sale_reversal'
-  | 'subscription' | 'payout' | 'settlement' | 'adjustment';
+  | 'subscription' | 'payout' | 'settlement' | 'adjustment' | 'refund_payout';
 
 export type LedgerEntry = {
   id: string;
@@ -125,6 +125,11 @@ export const LEDGER_KIND_LABELS: Record<LedgerEntryKind, string> = {
   payout: 'تحويل للبائع',
   settlement: 'تحصيل من البائع',
   adjustment: 'تسوية',
+  // كان ناقص من القايمة، فالكشف كان بيعرض المفتاح الإنجليزي `refund_payout`
+  // وسط تسميات عربية. القيد ده هو قيمة المرتجع اللي رجعت للمشتري — البائع
+  // بيسدّدها دلوقتي بنفسه (بطاقة أو من رصيده)، والقيود القديمة (قبل ١٩ سبتمبر)
+  // وصفها بيقول «دفعتها المنصة» لأن ده اللي حصل فعلاً وقتها.
+  refund_payout: 'قيمة مرتجع للمشتري',
 };
 
 // ---------------------------------------------------------------- الكشوف

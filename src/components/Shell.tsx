@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Store, Building2, UserRound, Package, ClipboardList, ImageIcon, ShoppingCart,
   ReceiptText, FileSpreadsheet, Undo2, Wallet, Headset, Bell, Settings, ScrollText, LogOut,
-  CircleDollarSign,
+  CircleDollarSign, Ticket,
   ChevronLeft,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -110,6 +110,7 @@ export function Shell() {
       items: [
         { to: '/finance', label: 'المال', icon: <CircleDollarSign size={17} strokeWidth={1.75} /> },
         { to: '/wallets', label: 'المحافظ', icon: <Wallet size={17} strokeWidth={1.75} /> },
+        { to: '/discount-codes', label: 'أكواد الخصم', icon: <Ticket size={17} strokeWidth={1.75} /> },
       ],
     },
     {

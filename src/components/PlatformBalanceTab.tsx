@@ -9,19 +9,27 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Wallet, PiggyBank, Undo2, Landmark, Trash2, TrendingUp, Users, ChevronLeft,
+  Wallet, PiggyBank, Undo2, Landmark, Trash2, TrendingUp, Users, ChevronLeft, Store,
 } from 'lucide-react';
 import {
   fetchPlatformBalance, fetchWithdrawals, recordWithdrawal, deleteWithdrawal,
   fetchCustomerWallets,
 } from '../api/platform-balance';
+import { fetchSellerBalances, type SellerBalance } from '../api/seller-ledger';
 import type { DateRange } from './DateRangePicker';
 import { Card, KpiCard, Money, Btn, Field, Input, Textarea, ErrorState, Spinner } from './ui';
 import { ConfirmDialog, Modal } from './Modal';
 import { useToast } from './Toast';
 import { fmtDate } from '../lib/format';
 
-export function PlatformBalanceTab({ range }: { range: DateRange }) {
+export function PlatformBalanceTab({
+  range,
+  onOpenLedger,
+}: {
+  range: DateRange;
+  /** «كشف الحساب والتحصيل» — نفس البائعين بالتفصيل في تاب «حساب البائعين». */
+  onOpenLedger?: () => void;
+}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -42,6 +50,9 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
     queryFn: fetchCustomerWallets,
     enabled: wallets,
   });
+  // أرصدة البائعين بالتفصيل — نفس مصدر تاب «حساب البائعين» (`admin_seller_balances`)
+  // عشان الرقم المجمّع هنا وكشف البائع هناك ما يختلفوش أبدًا.
+  const sellers = useQuery({ queryKey: ['seller-balances', ''], queryFn: () => fetchSellerBalances('') });
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['platform-balance'] });
@@ -111,7 +122,7 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
             </p>
             <p className="mt-1 text-xs text-subtext">
               أرصدة المشترين <Money value={b.buyerFunds} /> · أرصدة البائعين{' '}
-              <Money value={b.sellerFunds} />
+              <Money value={b.sellerFunds} /> — تفصيل كل بائع في الكارت اللي تحت
             </p>
             {/* رصيد البائع بيجي من الدفتر مش من محفظة: فلوس البيع الأونلاين
                 المنصة بتقبضها بالنيابة عنه وتفضل عندها لحد ما تحوّلها. */}
@@ -142,6 +153,17 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
         </div>
       </Card>
 
+      {/* أرصدة البائعين بالتفصيل جوّه نفس الشاشة: الرقم المجمّع لوحده كان
+          بيسيب السؤال «مين وكام؟» من غير إجابة إلا بعد ما تنطّ لتاب تاني. */}
+      <SellerFundsCard
+        total={b.sellerFunds}
+        rows={sellers.data ?? []}
+        loading={sellers.isLoading}
+        error={sellers.isError ? ((sellers.error as Error)?.message ?? 'تعذر تحميل أرصدة البائعين') : null}
+        onRetry={() => { void sellers.refetch(); }}
+        onOpenLedger={onOpenLedger}
+      />
+
       {/* حركة الفترة */}
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="عمولات المبيعات" value={<Money value={b.commission} />}
@@ -153,7 +175,7 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
         <KpiCard
           title="عمولات مرتجعة للبائعين"
           value={<Money value={b.refunds} />}
-          hint="اللي اترد فعلًا لما البائع أكد الاستلام — بيتخصم من رصيد المنصة"
+          hint="اللي اترد فعلًا لما البائع أكد الاستلام — بيتخصم من رصيد المنصة وبيتقيّد رصيد للبائع"
           icon={<Undo2 size={20} />}
           tone="red"
         />
@@ -285,5 +307,83 @@ export function PlatformBalanceTab({ range }: { range: DateRange }) {
         onConfirm={() => { if (delTarget) remove.mutate(delTarget); }}
       />
     </div>
+  );
+}
+
+/**
+ * «أرصدة البائعين» — فلوس البائعين اللي المنصة شايلاها، وكل بائع عنده كام.
+ *
+ * الإجمالي لوحده مابيقولش مين؛ والعمولة اللي بترجع للبائع لما يأكد استلام
+ * المرتجع بتنزل في حسابه هنا وتفضل رصيد ليه لحد ما تتحوّل له فعلًا.
+ *
+ * **الموجب والسالب مابيتقاصّوش**: الإجمالي فوق هو اللي *ليهم* بس — لأنه أمانة
+ * في الحساب البنكي. البائع اللي *عليه* عمولة (باع كاش وقبض بإيده) دين على
+ * المنصة مش فلوس شايلاها، فبيتعرض جنبه للعلم مش كخصم.
+ */
+function SellerFundsCard({
+  total, rows, loading, error, onRetry, onOpenLedger,
+}: {
+  total: number;
+  rows: SellerBalance[];
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  onOpenLedger?: () => void;
+}) {
+  const credits = rows.filter((r) => r.balance > 0);
+  const debts = rows.filter((r) => r.balance < 0);
+  const owed = debts.reduce((a, r) => a + -r.balance, 0);
+  // الترتيب بالرصيد: اللي ليهم الأكتر فوق، واللي عليهم في الآخر.
+  const list = [...credits, ...debts].sort((a, b) => b.balance - a.balance);
+
+  return (
+    <Card className="mb-4 p-5">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="flex items-center gap-1.5 text-sm text-subtext">
+            <Store size={15} /> أرصدة البائعين
+          </p>
+          <p className="mt-1 text-2xl font-bold"><Money value={total} /></p>
+          <p className="mt-1 text-xs text-subtext">
+            مستحق لـ{credits.length} بائع — جزء من «أموال العملاء المحتجزة» فوق، مش للسحب.
+            {debts.length > 0 && (
+              <> وفي {debts.length} بائع عليهم للمنصة <Money value={owed} /> (عمولة بيع كاش) — مش مقاصّة.</>
+            )}
+          </p>
+        </div>
+        {onOpenLedger && (
+          <button
+            type="button"
+            onClick={onOpenLedger}
+            className="flex items-center gap-1 text-sm font-medium text-accent hover:underline"
+          >
+            كشف الحساب والتحصيل <ChevronLeft size={14} />
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <Spinner />
+      ) : error ? (
+        <ErrorState message={error} onRetry={onRetry} />
+      ) : list.length === 0 ? (
+        <p className="py-4 text-center text-sm text-subtext">مفيش حركة على أي بائع</p>
+      ) : (
+        <div className="max-h-72 divide-y divide-line overflow-y-auto">
+          {list.map((r) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium">{r.name}</span>
+              {r.lastEntry && <span className="shrink-0 text-xs text-subtext">{fmtDate(r.lastEntry)}</span>}
+              <span
+                className={`shrink-0 font-medium ${r.balance > 0 ? 'text-success' : 'text-danger'}`}
+              >
+                {r.balance > 0 ? 'له ' : 'عليه '}
+                <Money value={Math.abs(r.balance)} />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

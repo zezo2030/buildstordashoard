@@ -19,6 +19,51 @@ import { Modal } from './Modal';
 import { useToast } from './Toast';
 import { fmtDate } from '../lib/format';
 
+/**
+ * «تحويلات مستحقة للبائعين» — كل بائع رصيده طلع موجب.
+ *
+ * الرصيد الموجب معناه إن المنصة شايلة فلوس لبائع بعد ما اتقاصّت مع اللي
+ * عليه، والمفروض تطلع له مش تقعد. الصف هنا عشان الأدمن يشوفها ويسجّل
+ * التحويل، بدل ما الرقم يتوه وسط قايمة كل البائعين.
+ */
+function PayoutQueue({ rows, onPay }: {
+  rows: SellerBalance[];
+  onPay: (r: SellerBalance) => void;
+}) {
+  const due = rows.filter((r) => r.balance > 0);
+  if (due.length === 0) return null;
+  const total = due.reduce((a, r) => a + r.balance, 0);
+
+  return (
+    <Card className="mb-4 border-r-4 border-r-success p-5">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 font-bold">
+          <HandCoins size={16} /> تحويلات مستحقة للبائعين
+        </h2>
+        <span className="font-bold text-success"><Money value={total} /></span>
+      </div>
+      <p className="mb-3 text-sm text-subtext">
+        ده الفايض بعد خصم اللي على البائع، والبائع اتنبّه إنه هيتحوّل له. سجّل التحويل بعد
+        ما يطلع من البنك عشان رصيده يقفل على صفر.
+      </p>
+      <div className="divide-y divide-line">
+        {due.map((r) => (
+          <div key={r.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+            <span className="min-w-0 flex-1 truncate font-medium">{r.name}</span>
+            {r.lastEntry && (
+              <span className="text-xs text-subtext">آخر حركة {fmtDate(r.lastEntry)}</span>
+            )}
+            <span className="font-medium text-success"><Money value={r.balance} /></span>
+            <Btn variant="accent" className="px-2.5 py-1 text-xs" onClick={() => onPay(r)}>
+              سجّل التحويل
+            </Btn>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 /** «عليه 12.500» / «له 3.000» — الإشارة بكلمة مش بسالب. */
 function BalanceCell({ value }: { value: number }) {
   if (value === 0) return <span className="text-subtext">مقفول</span>;
@@ -106,6 +151,14 @@ export function SellerLedgerTab() {
       </div>
 
       <StatementsStrip />
+
+      {/* الفايض ما يقعدش رصيد عند المنصة — يطلع للبائع. البائع بيتنبّه أول ما
+          رصيده يعدّي الصفر (تريجر `t_seller_ledger_surplus`)، والصف ده هو
+          طابور التنفيذ عند الأدمن. */}
+      <PayoutQueue
+        rows={rows}
+        onPay={(r) => { setOpen(r); setKind('payout'); setAmount(r.balance.toFixed(3)); }}
+      />
 
       <Card className="p-5">
         <div className="mb-3 flex flex-wrap items-center gap-2">

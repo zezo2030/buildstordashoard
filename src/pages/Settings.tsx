@@ -1,4 +1,5 @@
-// الإعدادات — أرقام المنصة (عمولة، إرجاع…) + أسباب الإرجاع اللي بتظهر للمشتري.
+// الإعدادات — أرقام المنصة (عمولة، إرجاع…) + قايمتين أسباب منفصلتين:
+// أسباب الإرجاع اللي المشتري بيختار منها، وأسباب الرفض اللي البائع بيختار منها.
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -39,11 +40,14 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="الإعدادات"
-        subtitle="أرقام المنصة اللي التطبيق بيشتغل بيها، وأسباب الإرجاع اللي بتظهر للمشتري لما يرجع طلب"
+        subtitle="أرقام المنصة اللي التطبيق بيشتغل بيها، وقايمتين الأسباب: إرجاع المشتري ورفض البائع"
       />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <AppSettings />
-        <ReturnReasons />
+        <div className="grid gap-4">
+          <ReturnReasons side="buyer" />
+          <ReturnReasons side="seller" />
+        </div>
       </div>
     </div>
   );
@@ -178,16 +182,61 @@ function AppSettings() {
   );
 }
 
-function ReturnReasons() {
+/**
+ * أسباب الإرجاع وأسباب الرفض — قايمتين مستقلتين في نفس الجدول، الفرق `side`.
+ *
+ * المشتري بيشوف أسباب `buyer` لما يرجّع طلب، والبائع بيشوف أسباب `seller` لما
+ * يرفض بند. قبل كده الشاشة كانت بتعرضهم مخلوطين، فالمالك يلاقي «فات وقت الإرجاع»
+ * (سبب بائع) جوّه قايمة المشتري، وأي سبب جديد بيتضاف كان بينزل للمشتري بالغصب
+ * لأن `side` الافتراضي `buyer` — يعني إضافة سبب رفض للبائع مكانتش ممكنة أصلاً.
+ */
+const REASON_SIDES = {
+  buyer: {
+    title: 'أسباب إرجاع المشتري',
+    hint: 'القائمة اللي المشتري بيختار منها سبب الإرجاع. عطّله لو مش عايزه يظهر مؤقتًا، أو احذفه نهائيًا — السبب المستخدم في سند إرجاع قايم مايتحذفش.',
+    newTitle: 'سبب إرجاع جديد',
+    editTitle: 'تعديل سبب إرجاع',
+    deleteTitle: 'حذف سبب إرجاع',
+    deleteMessage: (label: string) => `سيتم حذف «${label}» نهائيًا من قائمة المشتري. متابعة؟`,
+    labelField: 'النص اللي يظهر للمشتري',
+    codeHint: 'حروف إنجليزية صغيرة بدون مسافات، مثال: damaged',
+  },
+  seller: {
+    title: 'أسباب رفض البائع',
+    hint: 'القائمة اللي البائع بيختار منها سبب رفض بند في المرتجع. عطّله لو مش عايزه يظهر مؤقتًا، أو احذفه نهائيًا.',
+    newTitle: 'سبب رفض جديد',
+    editTitle: 'تعديل سبب رفض',
+    deleteTitle: 'حذف سبب رفض',
+    deleteMessage: (label: string) => `سيتم حذف «${label}» نهائيًا من قائمة البائع. متابعة؟`,
+    labelField: 'النص اللي يظهر للبائع',
+    codeHint: 'حروف إنجليزية صغيرة بدون مسافات، وهيتحط قدامه seller_ تلقائيًا، مثال: window_passed',
+  },
+} as const;
+
+type ReasonSide = keyof typeof REASON_SIDES;
+
+/** الكود مفتاح أساسي للجدول كله، فأكواد البائع مسبوقة عشان ما تتصادمش مع أكواد المشتري. */
+function reasonCode(side: ReasonSide, raw: string): string {
+  const code = raw.trim();
+  if (side !== 'seller' || !code) return code;
+  return code.startsWith('seller_') ? code : `seller_${code}`;
+}
+
+function ReturnReasons({ side }: { side: ReasonSide }) {
+  const copy = REASON_SIDES[side];
   const qc = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState<{ code: string; label_ar: string; isNew?: boolean } | null>(null);
   const [deleting, setDeleting] = useState<{ code: string; label_ar: string } | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['return-reasons'],
+    queryKey: ['return-reasons', side],
     queryFn: async () => {
-      const { data, error } = await supabase.from('return_reasons').select('*').order('sort_order');
+      const { data, error } = await supabase
+        .from('return_reasons')
+        .select('*')
+        .eq('side', side)
+        .order('sort_order');
       if (error) throw new Error(arError(error));
       return data;
     },
@@ -198,7 +247,7 @@ function ReturnReasons() {
       const { error } = await supabase.from('return_reasons').update({ is_active: !r.is_active }).eq('code', r.code);
       if (error) throw new Error(arError(error));
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['return-reasons'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['return-reasons', side] }),
     onError: (e) => toast('error', (e as Error).message),
   });
 
@@ -212,7 +261,7 @@ function ReturnReasons() {
     onSuccess: () => {
       toast('success', 'تم حذف السبب');
       setDeleting(null);
-      qc.invalidateQueries({ queryKey: ['return-reasons'] });
+      qc.invalidateQueries({ queryKey: ['return-reasons', side] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -221,9 +270,12 @@ function ReturnReasons() {
     mutationFn: async () => {
       if (!editing) return;
       if (!editing.label_ar.trim()) throw new Error('التسمية مطلوبة');
-      if (editing.isNew && !editing.code.trim()) throw new Error('الكود مطلوب');
+      const code = reasonCode(side, editing.code);
+      if (editing.isNew && !code) throw new Error('الكود مطلوب');
+      // الترتيب بيتحسب جوّه القايمة دي لوحدها — القايمتين مستقلتين.
+      const lastOrder = (data ?? []).reduce((max, r) => Math.max(max, r.sort_order), 0);
       const q = editing.isNew
-        ? supabase.from('return_reasons').insert({ code: editing.code.trim(), label_ar: editing.label_ar.trim(), sort_order: (data?.length ?? 0) + 1 })
+        ? supabase.from('return_reasons').insert({ code, label_ar: editing.label_ar.trim(), side, sort_order: lastOrder + 1 })
         : supabase.from('return_reasons').update({ label_ar: editing.label_ar.trim() }).eq('code', editing.code);
       const { error } = await q;
       if (error) throw new Error(arError(error));
@@ -231,7 +283,7 @@ function ReturnReasons() {
     onSuccess: () => {
       toast('success', 'تم الحفظ');
       setEditing(null);
-      qc.invalidateQueries({ queryKey: ['return-reasons'] });
+      qc.invalidateQueries({ queryKey: ['return-reasons', side] });
     },
     onError: (e) => toast('error', (e as Error).message),
   });
@@ -239,15 +291,14 @@ function ReturnReasons() {
   return (
     <Card className="p-5">
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="font-bold">أسباب الإرجاع</h2>
+        <h2 className="font-bold">{copy.title}</h2>
         <Btn variant="accent" onClick={() => setEditing({ code: '', label_ar: '', isNew: true })}>+ إضافة</Btn>
       </div>
-      <p className="mb-3 text-sm text-subtext">
-        القائمة اللي المشتري بيختار منها سبب الإرجاع. عطّله لو مش عايزه يظهر مؤقتًا، أو احذفه
-        نهائيًا — السبب المستخدم في سند إرجاع قايم مايتحذفش.
-      </p>
+      <p className="mb-3 text-sm text-subtext">{copy.hint}</p>
       {isLoading ? (
         <div className="py-6 text-center text-sm text-subtext">جارٍ التحميل…</div>
+      ) : (data ?? []).length === 0 ? (
+        <p className="py-4 text-center text-sm text-subtext">لا توجد أسباب</p>
       ) : (
         <div className="divide-y divide-line">
           {(data ?? []).map((r) => (
@@ -271,8 +322,8 @@ function ReturnReasons() {
 
       <ConfirmDialog
         open={!!deleting}
-        title="حذف سبب إرجاع"
-        message={deleting ? `سيتم حذف «${deleting.label_ar}» نهائيًا من قائمة المشتري. متابعة؟` : null}
+        title={copy.deleteTitle}
+        message={deleting ? copy.deleteMessage(deleting.label_ar) : null}
         confirmLabel="حذف"
         danger
         busy={remove.isPending}
@@ -280,14 +331,14 @@ function ReturnReasons() {
         onClose={() => setDeleting(null)}
       />
       {editing && (
-        <Modal title={editing.isNew ? 'سبب إرجاع جديد' : 'تعديل سبب إرجاع'} open onClose={() => setEditing(null)}>
+        <Modal title={editing.isNew ? copy.newTitle : copy.editTitle} open onClose={() => setEditing(null)}>
           <div className="space-y-4">
             {editing.isNew && (
-              <Field label="كود داخلي" hint="حروف إنجليزية صغيرة بدون مسافات، مثال: damaged">
+              <Field label="كود داخلي" hint={copy.codeHint}>
                 <Input dir="ltr" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} />
               </Field>
             )}
-            <Field label="النص اللي يظهر للمشتري">
+            <Field label={copy.labelField}>
               <Input value={editing.label_ar} onChange={(e) => setEditing({ ...editing, label_ar: e.target.value })} />
             </Field>
             <div className="flex justify-end gap-2">

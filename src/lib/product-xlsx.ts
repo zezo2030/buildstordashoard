@@ -17,6 +17,8 @@ export type ParsedProductRow = {
 
 export type PlannedProductRow = ParsedProductRow & {
   sourceCode: string;
+  /** أرقام التشابه المقروءة من خانة Description — شوف `splitDescriptionCell`. */
+  similarCodes: string[];
 };
 
 export type ImportSkipReason = 'missing_name' | 'missing_sku';
@@ -81,6 +83,32 @@ export function cleanCell(v: string | null | undefined): string | null {
   return t;
 }
 
+/** حد أقصى لأرقام التشابه على المادة الواحدة — نفس حد `products_similar_codes_check`. */
+const MAX_SIMILAR_CODES = 20;
+
+/**
+ * خانة Description في الشيت بتخدم غرضين.
+ *
+ * المالك بيكتب فيها **رقم التشابه** («14»، أو «14, 16» لأكتر من مجموعة)،
+ * وقبل كده كانت بتتخزّن وصفًا يتعرض للمشتري. فالقراءة بقت على القيمة نفسها:
+ * أرقام كلها ⇒ أرقام تشابه · أي حاجة تانية ⇒ وصف زي ما كان.
+ *
+ * القاعدة دي مقصودة عشان الشيتات القديمة اللي فيها وصف حقيقي تفضل تشتغل،
+ * والمفروض تفضل واضحة في شاشة الرفع عشان اللي بيملا الشيت يعرفها.
+ */
+export function splitDescriptionCell(raw: string | null | undefined): {
+  similarCodes: string[];
+  descriptionAr: string | null;
+} {
+  const text = (raw ?? '').trim();
+  if (!text) return { similarCodes: [], descriptionAr: null };
+  const parts = text.split(/[\s,،;/|-]+/).filter(Boolean);
+  if (!parts.every((p) => /^[0-9]{1,10}$/.test(p))) {
+    return { similarCodes: [], descriptionAr: text };
+  }
+  return { similarCodes: [...new Set(parts)].slice(0, MAX_SIMILAR_CODES), descriptionAr: null };
+}
+
 export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<string>): ImportPlan {
   const seen = new Set([...existingSkus].map((s) => s.trim()));
   const toInsert: PlannedProductRow[] = [];
@@ -91,8 +119,9 @@ export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<st
     const nameAr = r.nameAr.trim();
     const sourceCode = r.sku.trim();
     const originCountry = cleanCell(r.originCountry);
-    const descriptionAr = r.descriptionAr?.trim() || null;
-    if (!nameAr && !sourceCode && !originCountry && !descriptionAr && !r.image) continue;
+    const { similarCodes, descriptionAr } = splitDescriptionCell(r.descriptionAr);
+    const hasDescriptionCell = !!r.descriptionAr?.trim();
+    if (!nameAr && !sourceCode && !originCountry && !hasDescriptionCell && !r.image) continue;
     if (!nameAr) {
       skippedInvalid.push({ rowNumber: r.rowNumber, reason: 'missing_name' });
       continue;
@@ -109,6 +138,7 @@ export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<st
       sourceCode,
       originCountry,
       descriptionAr,
+      similarCodes,
     };
     if (seen.has(sourceCode) || seen.has(sku)) {
       skippedDuplicate.push(normalized);

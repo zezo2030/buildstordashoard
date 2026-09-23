@@ -14,6 +14,7 @@ import {
 } from '../api/products';
 import { uploadProductImage } from '../lib/product-image';
 import { skuFromSourceCode } from '../lib/catalog-sku';
+import { addSimilarCodes, MAX_SIMILAR_CODES } from '../lib/similar-codes';
 import { PageHeader, Btn, Field, Input, Select, Toggle, StatusChip, Money } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { ImportProductsModal } from '../components/ImportProductsModal';
@@ -131,6 +132,23 @@ export default function Products() {
     },
     { key: 'unit', header: 'الوحدة', render: (r) => r.unitName || '—' },
     {
+      key: 'similar',
+      header: 'تشابه',
+      // الرقم هنا هو اللي بيجمع المواد في «منتجات مشابهة» في التطبيق —
+      // ظاهر في الجدول عشان الأدمن يشوف المجموعات من غير ما يفتح كل مادة.
+      render: (r) => (
+        r.similarCodes.length === 0 ? <span className="text-subtext">—</span> : (
+          <div className="flex flex-wrap gap-1">
+            {r.similarCodes.map((code) => (
+              <span key={code} className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] text-primary" dir="ltr">
+                {code}
+              </span>
+            ))}
+          </div>
+        )
+      ),
+    },
+    {
       key: 'offers',
       header: 'عروض البائعين',
       render: (r) => (
@@ -161,7 +179,7 @@ export default function Products() {
         subtitle="الكتالوج المشترك — كل منتج SKU واحد يعرض عليه البائعون أسعارهم"
         actions={
           <>
-            <Input placeholder="بحث بالاسم/SKU…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
+            <Input placeholder="بحث بالاسم/SKU/رقم تشابه…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
             <Select value={specialty} onChange={(e) => { setSpecialty(e.target.value); setPage(0); }} className="w-44">
               <option value="all">كل التخصصات</option>
               {(tree?.specialties ?? []).map((s) => (
@@ -238,6 +256,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [placements, setPlacements] = useState<Placement[]>([]);
+  const [similarCodes, setSimilarCodes] = useState<string[]>(product?.similarCodes ?? []);
   const [form, setForm] = useState({
     source_code: product?.sourceCode ?? '',
     name_ar: product?.nameAr ?? '',
@@ -267,7 +286,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('specialty_id, category_id, unit_id, origin_country, images, product_placements (specialty_id, category_id)')
+        .select('specialty_id, category_id, unit_id, origin_country, images, similar_codes, product_placements (specialty_id, category_id)')
         .eq('id', product!.id)
         .single();
       if (error) throw new Error(arError(error));
@@ -281,6 +300,8 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
           categoryId: p.category_id,
         }));
         setPlacements(normalizePlacements([primary, ...rest]));
+        // أنواع `database.ts` المولّدة لسه ما اتجدّدتش بعد العمود الجديد.
+        setSimilarCodes((data as { similar_codes?: string[] | null }).similar_codes ?? []);
         setForm((f) => ({
           ...f,
           unit_id: data.unit_id ?? '',
@@ -336,6 +357,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
         category_id: primary.categoryId,
         unit_id: form.unit_id,
         images: form.image_url.trim() ? [form.image_url.trim()] : [],
+        similar_codes: similarCodes,
       };
       const q = product
         ? supabase.from('products').update(payload).eq('id', product.id).select('id').single()
@@ -410,6 +432,8 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
           </Field>
         </div>
 
+        <SimilarCodesField value={similarCodes} onChange={setSimilarCodes} />
+
         <PlacementsField
           value={placements}
           onChange={setPlacements}
@@ -431,6 +455,61 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * أرقام التشابه — «ممكن أضيف كذا رقم».
+ *
+ * الرقم مجرد وسم: أي مادتين بينهم رقم مشترك بيظهروا لبعض في «منتجات مشابهة»
+ * في التطبيق. مافيش جدول مجموعات يتصان — شيل الرقم تخرج المادة من المجموعة.
+ */
+function SimilarCodesField({ value, onChange }: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const commit = () => {
+    if (!draft.trim()) return;
+    onChange(addSimilarCodes(value, draft));
+    setDraft('');
+  };
+
+  return (
+    <Field
+      label="أرقام التشابه"
+      hint={`المواد اللي ليها نفس الرقم بتظهر لبعض في «منتجات مشابهة» في التطبيق — لحد ${MAX_SIMILAR_CODES} رقم`}
+    >
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-2">
+        {value.map((code) => (
+          <span
+            key={code}
+            className="flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-xs text-primary"
+            dir="ltr"
+          >
+            {code}
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((one) => one !== code))}
+              title={`إزالة ${code}`}
+              className="text-subtext hover:text-danger"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        <Input
+          dir="ltr"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          // Enter بيحفظ الفورم في المودال، فبنمسكه هنا عشان يضيف الرقم بس.
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(); } }}
+          onBlur={commit}
+          placeholder="14"
+          className="w-24 border-0 bg-transparent p-0 focus:ring-0"
+        />
+      </div>
+    </Field>
   );
 }
 

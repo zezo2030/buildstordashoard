@@ -50,6 +50,8 @@ type ReturnDetail = {
   total_accepted: string | number;
   total_rejected: string | number;
   refund_amount: string | number;
+  /** رسوم نقل المرتجع اللي البائع خصمها مع قراره — بتتطرح من المسترد. */
+  return_delivery_fee: string | number;
   requested_at: string;
   seller_decided_at: string | null;
   picked_up_at: string | null;
@@ -58,8 +60,6 @@ type ReturnDetail = {
   return_reasons: { label_ar: string } | null;
   return_items: ReturnItemRow[];
   return_documents: { id: string; doc_type: string; pdf_path: string; created_at: string }[];
-  /** بيانات الطلب الأصلي — بنحتاج الخصم عشان نفسّر الفرق في المسترد. */
-  order: { order_number: string; subtotal: string | number; discount_total: string | number } | null;
 };
 
 const RETURN_DOCS_BUCKET = 'return-docs';
@@ -88,7 +88,7 @@ export function ReturnDetailsModal({ row, onClose }: {
         .from('return_requests')
         .select(
           `reason_code, reason_text, rejection_reason, refund_method, attachments,
-           total_accepted, total_rejected, refund_amount,
+           total_accepted, total_rejected, refund_amount, return_delivery_fee,
            requested_at, seller_decided_at, picked_up_at, received_at, refunded_at,
            return_reasons (label_ar),
            return_items (
@@ -96,8 +96,7 @@ export function ReturnDetailsModal({ row, onClose }: {
              unit_price, accepted_total,
              order_item:order_items (name_ar, sku, unit_ar, origin_country)
            ),
-           return_documents (id, doc_type, pdf_path, created_at),
-           order:orders (order_number, subtotal, discount_total)`,
+           return_documents (id, doc_type, pdf_path, created_at)`,
         )
         .eq('id', row.id)
         .single();
@@ -106,15 +105,26 @@ export function ReturnDetailsModal({ row, onClose }: {
     },
   });
 
-  // «مبلغ الفاتورة» أقل من «قيمة المقبول» لما الطلب يكون عليه خصم: المشتري
-  // دفع بعد الخصم، فبيرجع له اللي دفعه مش سعر القايمة. `decide_return` بتطرح
-  // حصة كل بند من خصمه. من غير السطر ده الفرق بيبان كأنه اقتطاع مجهول.
+  // «مبلغ الفاتورة» أقل من «قيمة المقبول» لسببين مختلفين تمامًا، ولازم يتكتبوا
+  // كل واحد لوحده — قبل كده الاتنين كانوا بيتجمّعوا في سطر «خصم الطلب»، فرسوم
+  // نقل خصمها البائع كانت بتبان كأنها خصم على طلب نسبته صفر:
+  //
+  //   سعر القايمة − حصة المقبول من خصم الطلب = اللي المشتري دفعه فعلًا
+  //   اللي دفعه       − رسوم نقل المرتجع       = المسترد له
+  //
+  // الرسوم رقم محفوظ (`return_delivery_fee`)، وحصة الخصم هي الباقي — ودي نفس
+  // معادلة `decide_return`.
+  const decided = !!data?.seller_decided_at;
   const acceptedTotal = Number(data?.total_accepted ?? 0);
   const refundTotal = Number(data?.refund_amount ?? row.refundAmount ?? 0);
-  const discountCut = data?.seller_decided_at ? acceptedTotal - refundTotal : 0;
-  const orderSubtotal = Number(data?.order?.subtotal ?? 0);
-  const orderDiscount = Number(data?.order?.discount_total ?? 0);
-  const discountPct = orderSubtotal > 0 ? (orderDiscount / orderSubtotal) * 100 : null;
+  const deliveryFee = decided ? Number(data?.return_delivery_fee ?? 0) : 0;
+  const discountCut = decided ? Math.max(acceptedTotal - refundTotal - deliveryFee, 0) : 0;
+  /** اللي المشتري دفعه فعلًا على الكمية المقبولة — سعر القايمة ناقص حصته من الخصم. */
+  const paidByBuyer = acceptedTotal - discountCut;
+  // النسبة من الأرقام نفسها مش من إجمالي الطلب: الخصم بيتوزّع على البنود
+  // بنسبة الكمية المقبولة، فنسبة الطلب كانت بتقول رقم تاني غير اللي مطروح.
+  const discountPct = acceptedTotal > 0 ? (discountCut / acceptedTotal) * 100 : null;
+  const EPS = 0.0005;
 
   const st = labelOf(returnStatusLabels, row.status);
   const reasonLabel = data?.return_reasons?.label_ar ?? null;
@@ -200,8 +210,7 @@ export function ReturnDetailsModal({ row, onClose }: {
                 {items.map((it) => {
                   const unit = it.order_item?.unit_ar ?? '';
                   // qty_accepted/qty_rejected أعمدة not null default 0، فقبل قرار البائع
-                  // بتبقى أصفار مالهاش معنى — بنعرض «—» لحد ما يتسجّل قرار.
-                  const decided = !!data?.seller_decided_at;
+                  // بتبقى أصفار مالهاش معنى — بنعرض «—» لحد ما يتسجّل قرار (`decided`).
                   return (
                     <tr key={it.id} className="border-t border-line align-top">
                       <td className="px-3 py-2 text-start">
@@ -254,14 +263,14 @@ export function ReturnDetailsModal({ row, onClose }: {
 
           <dl className="mt-3 space-y-1.5 rounded-lg bg-surface px-3 py-2.5 text-sm">
             <div className="flex justify-between">
-              <dt className="text-subtext">قيمة المقبول</dt>
-              <dd>{data?.seller_decided_at ? <Money value={data.total_accepted} /> : 'بانتظار قرار البائع'}</dd>
+              <dt className="text-subtext">قيمة المقبول بسعر القايمة</dt>
+              <dd>{decided ? <Money value={data.total_accepted} /> : 'بانتظار قرار البائع'}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-subtext">قيمة المرفوض</dt>
-              <dd>{data?.seller_decided_at ? <Money value={data.total_rejected} /> : '—'}</dd>
+              <dd>{decided ? <Money value={data.total_rejected} /> : '—'}</dd>
             </div>
-            {discountCut > 0.0005 && (
+            {discountCut > EPS && (
               <div className="flex justify-between text-danger">
                 <dt>
                   حصة المقبول من خصم الطلب
@@ -270,14 +279,34 @@ export function ReturnDetailsModal({ row, onClose }: {
                 <dd>− <Money value={discountCut} /></dd>
               </div>
             )}
+            {/* السطر الوسيط ده بيبان لما فيه خصم ورسوم مع بعض — من غيره
+                الأدمن مايعرفش الرسوم اتخصمت من سعر القايمة ولا من المدفوع. */}
+            {discountCut > EPS && deliveryFee > EPS && (
+              <div className="flex justify-between">
+                <dt className="text-subtext">اللي المشتري دفعه فعلًا</dt>
+                <dd><Money value={paidByBuyer} /></dd>
+              </div>
+            )}
+            {deliveryFee > EPS && (
+              <div className="flex justify-between text-danger">
+                <dt>رسوم نقل المرتجع (خصمها البائع)</dt>
+                <dd>− <Money value={deliveryFee} /></dd>
+              </div>
+            )}
             <div className="flex justify-between border-t border-line pt-1.5 font-bold">
-              <dt>مبلغ الفاتورة</dt><dd><Money value={refundTotal} /></dd>
+              <dt>مبلغ الفاتورة — المسترد للمشتري</dt><dd><Money value={refundTotal} /></dd>
             </div>
           </dl>
-          {discountCut > 0.0005 && (
+          {discountCut > EPS && (
             <p className="mt-1.5 text-xs text-subtext">
               المشتري دفع بعد خصم الطلب، فبيرجع له اللي دفعه فعلًا مش سعر القايمة —
               الخصم بيتوزّع على البنود بنسبة الكمية المقبولة.
+            </p>
+          )}
+          {deliveryFee > EPS && (
+            <p className="mt-1.5 text-xs text-subtext">
+              رسوم نقل المرتجع بيحددها البائع مع قراره لأنه بيتحمّل رجوع البضاعة —
+              بتتخصم من المسترد، والمشتري بيشوف القيمة النهائية ويوافق أو يرفض.
             </p>
           )}
 
