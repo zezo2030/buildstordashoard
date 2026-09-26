@@ -23,6 +23,7 @@ function row(partial: Partial<ParsedProductRow> & Pick<ParsedProductRow, 'rowNum
   return {
     originCountry: null,
     descriptionAr: null,
+    keywords: null,
     image: null,
     ...partial,
   };
@@ -143,6 +144,36 @@ describe('buildProductXlsxTemplate', () => {
         image: null,
       }),
     ]);
+  });
+
+  it('reads the Keywords column', async () => {
+    const parsed = await parseProductXlsx(buildProductXlsxTemplate([
+      { nameAr: 'ماكينة لحام', sku: '57857', keywords: 'لحام، لحامة' },
+    ]));
+    expect(parsed.rows[0]).toEqual(expect.objectContaining({ keywords: 'لحام، لحامة' }));
+  });
+});
+
+describe('Keywords in the import plan', () => {
+  it('splits keywords on commas and keeps multi-word ones whole', () => {
+    const plan = planProductImport(
+      [row({ rowNumber: 2, nameAr: 'ماكينة لحام', sku: '57857', keywords: 'لحام, لحامة ، ماكينة لحام' })],
+      new Set(),
+    );
+    expect(plan.toInsert[0].searchKeywords).toEqual(['لحام', 'لحامة', 'ماكينة لحام']);
+  });
+
+  it('keeps keywords on a duplicate row so they can be merged into the existing product', () => {
+    const plan = planProductImport(
+      [row({ rowNumber: 2, nameAr: 'ماكينة لحام', sku: '57857', keywords: 'لحام' })],
+      new Set(['57857']),
+    );
+    expect(plan.skippedDuplicate[0].searchKeywords).toEqual(['لحام']);
+  });
+
+  it('gives an empty list when the sheet has no Keywords', () => {
+    const plan = planProductImport([row({ rowNumber: 2, nameAr: 'ازميل', sku: '1' })], new Set());
+    expect(plan.toInsert[0].searchKeywords).toEqual([]);
   });
 });
 

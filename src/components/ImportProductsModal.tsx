@@ -11,6 +11,7 @@ import {
   type PlannedProductRow,
 } from '../lib/product-xlsx';
 import { skuFromSourceCode } from '../lib/catalog-sku';
+import { addKeywords, parseKeywords, serializeKeywords } from '../lib/search-keywords';
 import { useAdmin } from './Guard';
 import { Modal } from './Modal';
 import { useToast } from './Toast';
@@ -151,11 +152,14 @@ export function ImportProductsModal({
   const importRows = useMutation({
     mutationFn: async () => {
       if (!plan) throw new Error('اختر ملف Excel أولاً');
-      if (!specialtyId) throw new Error('التخصص غير محدد');
-      if (!unitId) throw new Error('اختر الوحدة');
-      await assertLeafCategory(specialtyId, categoryId || null);
       const rows = plan.toInsert;
-      if (rows.length === 0) throw new Error('لا توجد منتجات جديدة للإضافة');
+      const keywordRows = keywordUpdates(plan);
+      if (rows.length === 0 && keywordRows.length === 0) throw new Error('لا توجد منتجات جديدة للإضافة');
+      if (rows.length > 0) {
+        if (!specialtyId) throw new Error('التخصص غير محدد');
+        if (!unitId) throw new Error('اختر الوحدة');
+        await assertLeafCategory(specialtyId, categoryId || null);
+      }
       setProgress({ done: 0, total: rows.length });
       let added = 0;
       for (const row of rows) {
@@ -166,6 +170,7 @@ export function ImportProductsModal({
           name_ar: row.nameAr,
           description_ar: row.descriptionAr,
           similar_codes: row.similarCodes,
+          search_keywords: serializeKeywords(row.searchKeywords),
           origin_country: row.originCountry,
           specialty_id: specialtyId,
           category_id: categoryId || null,
@@ -177,16 +182,20 @@ export function ImportProductsModal({
         added += 1;
         setProgress({ done: added, total: rows.length });
       }
-      return added;
+      // الكتالوج اترفع قبل عمود Keywords، فالكود الموجود ما بيتضافش تاني لكن
+      // كلماته بتتضم للي عليه (من غير ما تمسح كلمات اتكتبت من الفورم).
+      let keywordsUpdated = 0;
+      for (const row of keywordRows) {
+        if (await mergeKeywordsIntoExisting(row)) keywordsUpdated += 1;
+      }
+      return { added, keywordsUpdated };
     },
-    onSuccess: (added) => {
+    onSuccess: ({ added, keywordsUpdated }) => {
       const skipped = (plan?.skippedDuplicate.length ?? 0) + (plan?.skippedInvalid.length ?? 0);
-      toast(
-        'success',
-        skipped > 0
-          ? `تمت إضافة ${added} منتج — تم تجاهل ${skipped}`
-          : `تمت إضافة ${added} منتج`,
-      );
+      const parts = [`تمت إضافة ${added} منتج`];
+      if (keywordsUpdated > 0) parts.push(`اتضافت كلمات بحث لـ ${keywordsUpdated} منتج موجود`);
+      if (skipped > 0) parts.push(`تم تجاهل ${skipped}`);
+      toast('success', parts.join(' — '));
       onDone();
     },
     onError: (e) => toast('error', (e as Error).message),
@@ -207,6 +216,10 @@ export function ImportProductsModal({
           عمود <span dir="ltr">Description</span>: لو كتبت فيه <b>أرقام</b> (مثال <span dir="ltr">14</span> أو <span dir="ltr">14, 16</span>)
           تتسجّل <b>أرقام تشابه</b> — وكل المواد اللي ليها نفس الرقم بتظهر لبعض في «منتجات مشابهة» في التطبيق.
           أي نص تاني بيتسجّل وصفًا للمادة.
+        </p>
+        <p className="text-sm text-subtext">
+          عمود <span dir="ltr">Keywords</span> (اختياري): كلمات بحث مخفية مفصولة بفاصلة (مثال: لحام، لحامة) —
+          المشتري بيلاقي المادة بيها ومش بتظهر في التطبيق. لو الكود موجود قبل كده، كلماته بتتضاف للمنتج الموجود.
         </p>
         <Btn type="button" variant="ghost" onClick={downloadProductXlsxTemplate}>
           <Download size={16} />
@@ -301,6 +314,8 @@ export function ImportProductsModal({
               <Stat label="ناقص اسم/كود" value={plan.skippedInvalid.length} />
               <Stat label="بصور" value={plan.toInsert.filter((r) => r.image).length} />
               <Stat label="بأرقام تشابه" value={plan.toInsert.filter((r) => r.similarCodes.length > 0).length} />
+              <Stat label="بكلمات بحث" value={plan.toInsert.filter((r) => r.searchKeywords.length > 0).length} />
+              <Stat label="كلمات لمنتج موجود" value={keywordUpdates(plan).length} />
             </div>
             {preview.length > 0 && (
               <div className="divide-y divide-line overflow-hidden rounded-lg bg-white ring-1 ring-line">
@@ -326,7 +341,7 @@ export function ImportProductsModal({
           <Btn
             variant="accent"
             busy={importRows.isPending}
-            disabled={parsing || !plan || plan.toInsert.length === 0}
+            disabled={parsing || !plan || (plan.toInsert.length === 0 && keywordUpdates(plan).length === 0)}
             onClick={() => importRows.mutate()}
           >
             تأكيد الرفع
@@ -374,6 +389,37 @@ function PreviewRow({ row }: { row: PlannedProductRow }) {
       <div className="text-xs text-subtext">{row.originCountry ?? '—'}</div>
     </div>
   );
+}
+
+/** صفوف كودها موجود ومعاها كلمات بحث — بتتضم للمنتج الموجود بدل ما تتجاهل. */
+function keywordUpdates(plan: ImportPlan): PlannedProductRow[] {
+  return plan.skippedDuplicate.filter((r) => r.searchKeywords.length > 0);
+}
+
+/**
+ * بتضم كلمات الصف للمنتج الموجود بنفس الكود. بتدوّر بالكود الأصلي الأول،
+ * وبعدين بالـSKU (المولّد أو المكتوب) زي `fetchExistingSkus`.
+ * بترجّع true لو اتضاف فعلًا حاجة جديدة.
+ */
+async function mergeKeywordsIntoExisting(row: PlannedProductRow): Promise<boolean> {
+  let found = await supabase.from('products').select('id, search_keywords')
+    .eq('source_code', row.sourceCode).limit(1).maybeSingle();
+  if (!found.error && !found.data) {
+    found = await supabase.from('products').select('id, search_keywords')
+      .in('sku', [row.sku, row.sourceCode]).limit(1).maybeSingle();
+  }
+  if (found.error) throw new Error(arError(found.error));
+  if (!found.data) return false;
+
+  const current = parseKeywords(found.data.search_keywords);
+  const merged = addKeywords(current, row.searchKeywords.join(','));
+  if (merged.length === current.length) return false;
+
+  const { error } = await supabase.from('products')
+    .update({ search_keywords: serializeKeywords(merged) })
+    .eq('id', found.data.id);
+  if (error) throw new Error(arError(error));
+  return true;
 }
 
 function isXlsxFile(file: File): boolean {

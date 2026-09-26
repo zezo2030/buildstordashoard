@@ -2310,6 +2310,7 @@ export type Database = {
           name_en: string | null
           origin_country: string | null
           search_doc: unknown
+          search_keywords: string
           similar_codes: string[]
           sku: string
           source_code: string | null
@@ -2332,6 +2333,7 @@ export type Database = {
           name_en?: string | null
           origin_country?: string | null
           search_doc?: unknown
+          search_keywords?: string
           similar_codes?: string[]
           sku: string
           source_code?: string | null
@@ -2354,6 +2356,7 @@ export type Database = {
           name_en?: string | null
           origin_country?: string | null
           search_doc?: unknown
+          search_keywords?: string
           similar_codes?: string[]
           sku?: string
           source_code?: string | null

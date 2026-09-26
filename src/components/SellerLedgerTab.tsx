@@ -1,77 +1,33 @@
 // تاب «حساب البائعين» في صفحة المال.
 //
-// الشاشة دي بتجاوب على سؤال واحد: **مين عليه كام؟** — وبعدين بتخليك تسجّل
-// التحصيل من غير ما تسيبها.
+// الشاشة دي بتجاوب على سؤال واحد: **مين عليه كام للمنصة؟**
 //
-// إشارة الرصيد هي كل الحكاية، فبتتعرض بكلمة مش بعلامة سالب: «عليه» بالأحمر
-// و«له» بالأخضر. المحذوف بيفضل ظاهر طول ما عليه فلوس — الحذف بيوقف التعامل
-// مش المديونية.
+// من ٢٥ سبتمبر مفيش بائع «ليه فلوس عند المنصة»: الفايض (حصيلة أونلاين بعد
+// العمولة واللي عليه) بيتنقل لمحفظته تلقائي، وأي مستحق جديد بيتخصم من
+// محفظته تلقائي. فالرصيد هنا يا «عليه» يا «مقفول»، والمحفظة معروضة جنبه.
+// ومفيش «تسجيل حركة» يدوي — التحصيل بيحصل لوحده (خصم من المحفظة) أو
+// بسداد البائع إلكتروني من التطبيق، والإيقاف بالقاعدة اللي في الإعدادات.
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Receipt, HandCoins, Search, ArrowUpLeft, FileText } from 'lucide-react';
+import { Receipt, Wallet, Search, ArrowUpLeft, FileText, ShieldAlert } from 'lucide-react';
 import {
-  fetchSellerBalances, fetchSellerStatement, settleSeller,
-  fetchSellerStatements, issueStatements, waiveStatement,
-  LEDGER_KIND_LABELS, type SellerBalance, type SellerStatementRow,
+  fetchSellerBalances, fetchSellerStatements, issueStatements, waiveStatement, fetchSuspendRule,
+  payoutSellerWallet,
+  type SellerBalance, type SellerStatementRow,
 } from '../api/seller-ledger';
 import { Card, KpiCard, Money, Btn, Field, Input, Textarea, ErrorState, Spinner, StatusChip } from './ui';
 import { Modal } from './Modal';
+import { SellerStatementModal } from './SellerStatementModal';
 import { useToast } from './Toast';
 import { fmtDate } from '../lib/format';
 
-/**
- * «تحويلات مستحقة للبائعين» — كل بائع رصيده طلع موجب.
- *
- * الرصيد الموجب معناه إن المنصة شايلة فلوس لبائع بعد ما اتقاصّت مع اللي
- * عليه، والمفروض تطلع له مش تقعد. الصف هنا عشان الأدمن يشوفها ويسجّل
- * التحويل، بدل ما الرقم يتوه وسط قايمة كل البائعين.
- */
-function PayoutQueue({ rows, onPay }: {
-  rows: SellerBalance[];
-  onPay: (r: SellerBalance) => void;
-}) {
-  const due = rows.filter((r) => r.balance > 0);
-  if (due.length === 0) return null;
-  const total = due.reduce((a, r) => a + r.balance, 0);
-
+/** «عليه 12.500 من 3 سبتمبر» / «مقفول». الإشارة بكلمة مش بسالب. */
+function DebtCell({ value, since }: { value: number; since: string | null }) {
+  if (value > -0.0005) return <span className="text-subtext">مقفول</span>;
   return (
-    <Card className="mb-4 border-r-4 border-r-success p-5">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-1.5 font-bold">
-          <HandCoins size={16} /> تحويلات مستحقة للبائعين
-        </h2>
-        <span className="font-bold text-success"><Money value={total} /></span>
-      </div>
-      <p className="mb-3 text-sm text-subtext">
-        ده الفايض بعد خصم اللي على البائع، والبائع اتنبّه إنه هيتحوّل له. سجّل التحويل بعد
-        ما يطلع من البنك عشان رصيده يقفل على صفر.
-      </p>
-      <div className="divide-y divide-line">
-        {due.map((r) => (
-          <div key={r.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
-            <span className="min-w-0 flex-1 truncate font-medium">{r.name}</span>
-            {r.lastEntry && (
-              <span className="text-xs text-subtext">آخر حركة {fmtDate(r.lastEntry)}</span>
-            )}
-            <span className="font-medium text-success"><Money value={r.balance} /></span>
-            <Btn variant="accent" className="px-2.5 py-1 text-xs" onClick={() => onPay(r)}>
-              سجّل التحويل
-            </Btn>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-/** «عليه 12.500» / «له 3.000» — الإشارة بكلمة مش بسالب. */
-function BalanceCell({ value }: { value: number }) {
-  if (value === 0) return <span className="text-subtext">مقفول</span>;
-  const owes = value < 0;
-  return (
-    <span className={owes ? 'font-medium text-danger' : 'font-medium text-success'}>
-      {owes ? 'عليه ' : 'له '}
-      <Money value={Math.abs(value)} />
+    <span className="text-end">
+      <span className="font-medium text-danger">عليه <Money value={-value} /></span>
+      {since && <span className="block text-[11px] text-subtext">من {fmtDate(since)}</span>}
     </span>
   );
 }
@@ -80,36 +36,29 @@ export function SellerLedgerTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState<SellerBalance | null>(null);
   const [statementOf, setStatementOf] = useState<SellerBalance | null>(null);
+  // فلوس المحفظة فلوس البائع — الطريق الوحيد تطلع بيه لحد ما طلبات السحب تتعمل
+  const [payoutOf, setPayoutOf] = useState<SellerBalance | null>(null);
   const [amount, setAmount] = useState('');
-  const [kind, setKind] = useState<'settlement' | 'payout'>('settlement');
   const [note, setNote] = useState('');
-  const [date, setDate] = useState('');
+
+  const payout = useMutation({
+    mutationFn: () => payoutSellerWallet(payoutOf!.id, amount, note),
+    onSuccess: () => {
+      toast('success', 'اتسجّل التحويل');
+      setPayoutOf(null); setAmount(''); setNote('');
+      qc.invalidateQueries({ queryKey: ['seller-balances'] });
+      qc.invalidateQueries({ queryKey: ['seller-general-statement'] });
+      qc.invalidateQueries({ queryKey: ['seller-commission-statement'] });
+    },
+    onError: (e) => toast('error', (e as Error).message),
+  });
 
   const q = useQuery({
     queryKey: ['seller-balances', search],
     queryFn: () => fetchSellerBalances(search),
   });
-
-  const statement = useQuery({
-    queryKey: ['seller-statement', statementOf?.id],
-    queryFn: () => fetchSellerStatement(statementOf!.id),
-    enabled: !!statementOf,
-  });
-
-  const save = useMutation({
-    mutationFn: () => settleSeller({
-      companyId: open!.id, amount, kind, note, date: date || null,
-    }),
-    onSuccess: () => {
-      toast('success', kind === 'settlement' ? 'اتسجّل التحصيل' : 'اتسجّل التحويل');
-      setOpen(null); setAmount(''); setNote(''); setDate('');
-      qc.invalidateQueries({ queryKey: ['seller-balances'] });
-      qc.invalidateQueries({ queryKey: ['seller-statement'] });
-    },
-    onError: (e) => toast('error', (e as Error).message),
-  });
+  const rule = useQuery({ queryKey: ['seller-suspend-rule'], queryFn: fetchSuspendRule });
 
   if (q.isError) {
     return (
@@ -121,48 +70,46 @@ export function SellerLedgerTab() {
   if (q.isLoading) return <Spinner />;
 
   const rows = q.data ?? [];
-  const owed = rows.filter((r) => r.balance < 0).reduce((a, r) => a + -r.balance, 0);
-  const due = rows.filter((r) => r.balance > 0).reduce((a, r) => a + r.balance, 0);
+  const debtors = rows.filter((r) => r.balance < -0.0005);
+  const owed = debtors.reduce((a, r) => a - r.balance, 0);
+  const wallets = rows.reduce((a, r) => a + r.wallet, 0);
+  const r = rule.data;
+  const ruleText = r
+    ? [r.afterDays > 0 ? `بعد ${r.afterDays} يوم` : null, r.maxDebt > 0 ? `عند ${r.maxDebt.toFixed(3)} د.ك` : null]
+        .filter(Boolean).join(' أو ') || 'مقفول'
+    : '…';
 
   return (
     <div>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
-          title="مستحق على البائعين"
+          title="مستحق على البائعين للمنصة"
           value={<Money value={owed} />}
-          hint={`${rows.filter((r) => r.balance < 0).length} بائع`}
+          hint={`${debtors.length} بائع`}
           icon={<Receipt size={20} />}
           tone="red"
         />
         <KpiCard
-          title="مستحق للبائعين"
-          value={<Money value={due} />}
-          hint={`${rows.filter((r) => r.balance > 0).length} بائع`}
-          icon={<HandCoins size={20} />}
+          title="في محافظ البائعين"
+          value={<Money value={wallets} />}
+          hint="فلوسهم هم بعد خصم العمولة — بيسحبوها بطلب سحب"
+          icon={<Wallet size={20} />}
           tone="green"
         />
         <KpiCard
-          title="صافي المركز"
-          value={<Money value={owed - due} />}
-          hint="اللي المنصة دائنة بيه بعد المقاصة"
-          icon={<Receipt size={20} />}
+          title="الإيقاف التلقائي"
+          value={ruleText}
+          hint="من صفحة الإعدادات — بيترفع لوحده أول ما يسدّد"
+          icon={<ShieldAlert size={20} />}
           tone="navy"
         />
       </div>
 
       <StatementsStrip />
 
-      {/* الفايض ما يقعدش رصيد عند المنصة — يطلع للبائع. البائع بيتنبّه أول ما
-          رصيده يعدّي الصفر (تريجر `t_seller_ledger_surplus`)، والصف ده هو
-          طابور التنفيذ عند الأدمن. */}
-      <PayoutQueue
-        rows={rows}
-        onPay={(r) => { setOpen(r); setKind('payout'); setAmount(r.balance.toFixed(3)); }}
-      />
-
       <Card className="p-5">
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="min-w-0 flex-1 font-bold">حساب البائعين الجاري</h2>
+          <h2 className="min-w-0 flex-1 font-bold">حساب البائعين مع المنصة</h2>
           <div className="relative">
             <Search size={14} className="absolute top-1/2 right-2.5 -translate-y-1/2 text-subtext" />
             <Input
@@ -175,136 +122,76 @@ export function SellerLedgerTab() {
         </div>
 
         <p className="mb-3 text-sm text-subtext">
-          البيع الكاش بيروح للبائع مباشرة فالعمولة بتفضل عليه؛ والبيع الإلكتروني بيدخل
-          المنصة فبتبقى هي اللي عليها. الرقم هنا هو الاتنين بعد المقاصة.
+          البائع عليه عمولة البيع الكاش والآجل بس (هو اللي قبض). البيع الإلكتروني بيدخل المنصة،
+          فبتاخد منه عمولتها واللي عليه، والباقي بيروح لمحفظته على طول.
         </p>
 
         {rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-subtext">مفيش حركة على أي بائع</p>
         ) : (
           <div className="divide-y divide-line">
-            {rows.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
+            {rows.map((s) => (
+              <div key={s.id} className="flex flex-wrap items-center gap-3 py-3 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{r.name}</span>
-                    {r.deleted && <StatusChip label="محذوف" tone="red" />}
-                    {!r.deleted && !r.isActive && <StatusChip label="موقوف" tone="orange" />}
+                    <span className="font-medium">{s.name}</span>
+                    {s.deleted && <StatusChip label="محذوف" tone="red" />}
+                    {!s.deleted && !s.isActive && <StatusChip label="موقوف" tone="orange" />}
                   </div>
                   <div className="mt-0.5 text-xs text-subtext">
-                    محمّل عليه <Money value={r.charged} /> · محصّل <Money value={r.settled} />
-                    {r.lastEntry && ` · آخر حركة ${fmtDate(r.lastEntry)}`}
+                    في محفظته <Money value={s.wallet} />
+                    {s.lastEntry && ` · آخر حركة ${fmtDate(s.lastEntry)}`}
                   </div>
                 </div>
-                <BalanceCell value={r.balance} />
+                <DebtCell value={s.balance} since={s.debtSince} />
                 <button
                   type="button"
-                  onClick={() => setStatementOf(r)}
+                  onClick={() => setStatementOf(s)}
                   className="flex items-center gap-1 rounded-lg border border-line px-2 py-1 text-xs text-subtext transition-colors hover:bg-surface hover:text-primary"
                 >
                   كشف حساب <ArrowUpLeft size={12} />
                 </button>
-                <Btn
-                  variant="ghost"
-                  onClick={() => {
-                    setOpen(r);
-                    setKind(r.balance < 0 ? 'settlement' : 'payout');
-                    setAmount(Math.abs(r.balance).toFixed(3));
-                  }}
-                >
-                  تسجيل حركة
-                </Btn>
+                {s.wallet > 0 && (
+                  <Btn
+                    variant="ghost"
+                    className="px-2.5 py-1 text-xs"
+                    onClick={() => { setPayoutOf(s); setAmount(s.wallet.toFixed(3)); }}
+                  >
+                    حوّل لحسابه البنكي
+                  </Btn>
+                )}
               </div>
             ))}
           </div>
         )}
       </Card>
 
-      {open && (
-        <Modal title={`حركة على حساب ${open.name}`} open onClose={() => setOpen(null)}>
+      {statementOf && (
+        <SellerStatementModal
+          companyId={statementOf.id}
+          name={statementOf.name}
+          onClose={() => setStatementOf(null)}
+        />
+      )}
+
+      {payoutOf && (
+        <Modal title={`تحويل من محفظة ${payoutOf.name}`} open onClose={() => setPayoutOf(null)}>
           <p className="mb-3 text-sm text-subtext">
-            الرصيد الحالي <BalanceCell value={open.balance} />.
+            في محفظته <Money value={payoutOf.wallet} />. سجّل التحويل بعد ما يطلع من البنك — المبلغ
+            بيتخصم من محفظته والبائع بيوصله إشعار. ده مش قيد على حسابه مع المنصة.
           </p>
-
-          <Field label="نوع الحركة">
-            <div className="flex gap-2">
-              {([
-                ['settlement', 'تحصيل من البائع'],
-                ['payout', 'تحويل للبائع'],
-              ] as const).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setKind(k)}
-                  className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
-                    kind === k ? 'border-accent bg-accent-soft text-accent' : 'border-line text-subtext'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <Field label="المبلغ (د.ك)">
+            <Input value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" />
           </Field>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="المبلغ (د.ك)">
-              <Input value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" />
-            </Field>
-            <Field label="التاريخ">
-              <Input
-                type="date"
-                value={date}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </Field>
-          </div>
           <Field label="ملاحظة (رقم التحويل مثلًا)">
             <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
-
           <div className="mt-3 flex gap-2">
-            <Btn onClick={() => save.mutate()} busy={save.isPending} disabled={!amount.trim()}>
-              تسجيل
+            <Btn onClick={() => payout.mutate()} busy={payout.isPending} disabled={!amount.trim()}>
+              تسجيل التحويل
             </Btn>
-            <Btn variant="ghost" onClick={() => setOpen(null)}>إلغاء</Btn>
+            <Btn variant="ghost" onClick={() => setPayoutOf(null)}>إلغاء</Btn>
           </div>
-        </Modal>
-      )}
-
-      {statementOf && (
-        <Modal
-          title={`كشف حساب ${statementOf.name}`}
-          open
-          onClose={() => setStatementOf(null)}
-          wide
-        >
-          {statement.isLoading || !statement.data ? <Spinner /> : (
-            <div>
-              <div className="mb-3 flex flex-wrap items-center gap-4 text-sm">
-                <span className="text-subtext">الرصيد الحالي</span>
-                <BalanceCell value={statement.data.balance} />
-              </div>
-              <div className="divide-y divide-line">
-                {statement.data.rows.map((e) => (
-                  <div key={e.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
-                    <span className="w-24 shrink-0 text-xs text-subtext">{fmtDate(e.entryDate)}</span>
-                    <StatusChip label={LEDGER_KIND_LABELS[e.kind] ?? e.kind} tone="navy" />
-                    <span className="min-w-0 flex-1 truncate text-xs text-subtext">
-                      {e.description ?? ''}
-                    </span>
-                    <span className={e.amount < 0 ? 'text-danger' : 'text-success'}>
-                      {e.amount < 0 ? '−' : '+'}
-                      <Money value={Math.abs(e.amount)} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {statement.data.rows.length === 0 && (
-                <p className="py-6 text-center text-sm text-subtext">مفيش قيود</p>
-              )}
-            </div>
-          )}
         </Modal>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { skuFromSourceCode } from './catalog-sku';
+import { addKeywords } from './search-keywords';
 
 export type ParsedProductImage = {
   bytes: Uint8Array;
@@ -12,6 +13,8 @@ export type ParsedProductRow = {
   originCountry: string | null;
   sku: string;
   descriptionAr: string | null;
+  /** خانة Keywords — كلمات بحث مخفية مفصولة بفاصلة. العمود اختياري في الشيت. */
+  keywords: string | null;
   image: ParsedProductImage | null;
 };
 
@@ -19,6 +22,8 @@ export type PlannedProductRow = ParsedProductRow & {
   sourceCode: string;
   /** أرقام التشابه المقروءة من خانة Description — شوف `splitDescriptionCell`. */
   similarCodes: string[];
+  /** كلمات البحث من خانة Keywords — بعد التقسيم وشيل المكرر (`addKeywords`). */
+  searchKeywords: string[];
 };
 
 export type ImportSkipReason = 'missing_name' | 'missing_sku';
@@ -34,6 +39,7 @@ export const PRODUCT_XLSX_HEADERS = {
   originCountry: 'Made In',
   sku: 'Code',
   descriptionAr: 'Description',
+  keywords: 'Keywords',
   image: 'Image',
 } as const;
 
@@ -45,8 +51,15 @@ const HEADER_ORDER = [
   PRODUCT_XLSX_HEADERS.originCountry,
   PRODUCT_XLSX_HEADERS.sku,
   PRODUCT_XLSX_HEADERS.descriptionAr,
+  PRODUCT_XLSX_HEADERS.keywords,
   PRODUCT_XLSX_HEADERS.image,
 ] as const;
+
+/**
+ * Keywords اختياري: الشيتات اللي اترفعت قبل العمود ده لازم تفضل تتقري. فهو مش
+ * في `REQUIRED_HEADERS`، ورسالة «الأعمدة المطلوبة» ما بتذكرهوش.
+ */
+const REQUIRED_HEADER_NAMES = HEADER_ORDER.filter((h) => h !== PRODUCT_XLSX_HEADERS.keywords);
 
 const REQUIRED_HEADERS = {
   [PRODUCT_XLSX_HEADERS.nameAr.toLowerCase()]: 'nameAr',
@@ -63,11 +76,12 @@ export type ProductXlsxTemplateRow = {
   originCountry?: string;
   sku?: string;
   descriptionAr?: string;
+  keywords?: string;
 };
 
 const BAD_FILE = 'ملف Excel غير صالح — ارفع ملف xlsx مطابق للنموذج';
 const BAD_HEADERS =
-  `ملف Excel غير مطابق للنموذج — الأعمدة المطلوبة: ${HEADER_ORDER.join(', ')}`;
+  `ملف Excel غير مطابق للنموذج — الأعمدة المطلوبة: ${REQUIRED_HEADER_NAMES.join(', ')}`;
 const BAD_CODE_HEADER = 'ملف Excel غير مطابق للنموذج — العمود المطلوب: Code';
 const CODE_HEADER_ALIASES = new Set(['code', 'sku', 'كود']);
 
@@ -121,7 +135,8 @@ export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<st
     const originCountry = cleanCell(r.originCountry);
     const { similarCodes, descriptionAr } = splitDescriptionCell(r.descriptionAr);
     const hasDescriptionCell = !!r.descriptionAr?.trim();
-    if (!nameAr && !sourceCode && !originCountry && !hasDescriptionCell && !r.image) continue;
+    const searchKeywords = addKeywords([], r.keywords ?? '');
+    if (!nameAr && !sourceCode && !originCountry && !hasDescriptionCell && searchKeywords.length === 0 && !r.image) continue;
     if (!nameAr) {
       skippedInvalid.push({ rowNumber: r.rowNumber, reason: 'missing_name' });
       continue;
@@ -139,6 +154,7 @@ export function planProductImport(rows: ParsedProductRow[], existingSkus: Set<st
       originCountry,
       descriptionAr,
       similarCodes,
+      searchKeywords,
     };
     if (seen.has(sourceCode) || seen.has(sku)) {
       skippedDuplicate.push(normalized);
@@ -157,8 +173,8 @@ export function buildProductXlsxTemplate(sampleRows: ProductXlsxTemplateRow[] = 
   return buildXlsxWorkbook(
     'Products',
     HEADER_ORDER,
-    rows.map((row) => [row.nameAr ?? '', row.originCountry ?? '', row.sku ?? '', row.descriptionAr ?? '', '']),
-    [36, 14, 18, 36, 16],
+    rows.map((row) => [row.nameAr ?? '', row.originCountry ?? '', row.sku ?? '', row.descriptionAr ?? '', row.keywords ?? '', '']),
+    [36, 14, 18, 36, 30, 16],
   );
 }
 
@@ -313,14 +329,16 @@ export async function parseProductXlsx(data: Uint8Array | ArrayBuffer): Promise<
     const sku = row.get(cols.sku) ?? '';
     const origin = row.get(cols.originCountry) ?? '';
     const description = row.get(cols.descriptionAr) ?? '';
+    const keywords = cols.keywordsCol == null ? '' : (row.get(cols.keywordsCol) ?? '');
     const image = imagesByRow.get(rowNumber) ?? null;
-    if (!nameAr && !sku && !origin && !description && !image) continue;
+    if (!nameAr && !sku && !origin && !description && !keywords.trim() && !image) continue;
     rows.push({
       rowNumber,
       nameAr,
       sku,
       originCountry: origin || null,
       descriptionAr: description || null,
+      keywords: keywords.trim() || null,
       image,
     });
   }
@@ -353,6 +371,7 @@ export async function parseCodeColumnXlsx(data: Uint8Array | ArrayBuffer): Promi
       sku,
       originCountry: null,
       descriptionAr: null,
+      keywords: null,
       image: null,
     });
   }
@@ -400,10 +419,15 @@ function findWorksheetPath(files: Record<string, Uint8Array>): string {
   throw new Error(BAD_FILE);
 }
 
-function mapHeaders(headerRow: Map<number, string>): Record<FieldKey, number> & { imageCol: number } {
+function mapHeaders(
+  headerRow: Map<number, string>,
+): Record<FieldKey, number> & { imageCol: number; keywordsCol: number | null } {
   const cols: Partial<Record<FieldKey, number>> = {};
+  let keywordsCol: number | null = null;
   for (const [col, raw] of headerRow) {
-    const key = REQUIRED_HEADERS[raw.trim().toLowerCase() as keyof typeof REQUIRED_HEADERS];
+    const header = raw.trim().toLowerCase();
+    if (header === PRODUCT_XLSX_HEADERS.keywords.toLowerCase()) keywordsCol = col;
+    const key = REQUIRED_HEADERS[header as keyof typeof REQUIRED_HEADERS];
     if (key) cols[key] = col;
   }
   if (
@@ -415,7 +439,10 @@ function mapHeaders(headerRow: Map<number, string>): Record<FieldKey, number> & 
   ) {
     throw new Error(BAD_HEADERS);
   }
-  return { ...cols, imageCol: cols.image } as Record<FieldKey, number> & { imageCol: number };
+  return { ...cols, imageCol: cols.image, keywordsCol } as Record<FieldKey, number> & {
+    imageCol: number;
+    keywordsCol: number | null;
+  };
 }
 
 function parseSharedStrings(xml: string): string[] {

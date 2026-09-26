@@ -23,6 +23,11 @@ export type SellerBalance = {
   settled: number;
   lastEntry: string | null;
   nEntries: number;
+  /** فلوس البائع في محفظته — الفايض بيتنقل لها تلقائي، ومنها بيتخصم أي مستحق. */
+  wallet: number;
+  /** أقدم مستحق لسه ما اتسدّدش — منه بتتحسب مهلة الإيقاف. */
+  debtSince: string | null;
+  suspendReason: string | null;
 };
 
 export type LedgerEntryKind =
@@ -64,7 +69,119 @@ export async function fetchSellerBalances(search = ''): Promise<SellerBalance[]>
     settled: num(r.settled),
     lastEntry: (r.last_entry as string | null) ?? null,
     nEntries: num(r.n_entries),
+    wallet: num(r.wallet),
+    debtSince: (r.debt_since as string | null) ?? null,
+    suspendReason: (r.suspend_reason as string | null) ?? null,
   }));
+}
+
+// ------------------------------------------------ كشف العمولات مع المنصة
+//
+// اللي بين المنصة والبائع بس: العمولة (واتخصمت من الحصيلة ولا لسه عليه)،
+// العمولة اللي رجعت في المرتجعات، الاشتراك، وأي سداد أو خصم من محفظته.
+// قيمة المرتجع نفسها مش هنا — دي بين البائع والمشتري.
+
+export type CommissionLine = {
+  id: string;
+  date: string;
+  kind: LedgerEntryKind;
+  refType: string | null;
+  amount: number;
+  description: string | null;
+  orderId: string | null;
+  orderNumber: string | null;
+  paymentMethod: string | null;
+};
+
+export type CommissionStatement = {
+  name: string;
+  /** المستحق على البائع دلوقتي. */
+  debt: number;
+  wallet: number;
+  since: string | null;
+  maxDebt: number;
+  afterDays: number;
+  suspended: boolean;
+  rows: CommissionLine[];
+};
+
+export async function fetchCommissionStatement(companyId: string): Promise<CommissionStatement> {
+  const { data, error } = await supabase.rpc('admin_seller_commission_statement' as never, {
+    p_company: companyId,
+  } as never);
+  if (error) throw new Error(arError(error));
+  const r = data as unknown as Record<string, unknown>;
+  return {
+    name: String(r.name ?? ''),
+    debt: num(r.debt),
+    wallet: num(r.wallet),
+    since: (r.since as string | null) ?? null,
+    maxDebt: num(r.max_debt),
+    afterDays: num(r.after_days),
+    suspended: r.suspended === true,
+    rows: ((r.rows ?? []) as Record<string, unknown>[]).map((x) => ({
+      id: String(x.id),
+      date: String(x.date),
+      kind: String(x.kind) as LedgerEntryKind,
+      refType: (x.ref_type as string | null) ?? null,
+      amount: num(x.amount),
+      description: (x.description as string | null) ?? null,
+      orderId: (x.order_id as string | null) ?? null,
+      orderNumber: (x.order_number as string | null) ?? null,
+      paymentMethod: (x.payment_method as string | null) ?? null,
+    })),
+  };
+}
+
+// ------------------------------------------------ الكشف العام (للاطلاع)
+
+export type GeneralStatement = {
+  sales: { orderId: string; orderNumber: string; date: string; buyer: string | null;
+           status: string; paymentMethod: string; paymentStatus: string;
+           total: number; commission: number }[];
+  returns: { returnId: string; returnNumber: string; date: string; orderNumber: string | null;
+             status: string; refundAmount: number; refundedAt: string | null }[];
+  wallet: { id: string; date: string; type: string; amount: number;
+            balanceAfter: number; description: string | null }[];
+};
+
+export async function fetchGeneralStatement(companyId: string): Promise<GeneralStatement> {
+  const { data, error } = await supabase.rpc('admin_seller_general_statement' as never, {
+    p_company: companyId,
+  } as never);
+  if (error) throw new Error(arError(error));
+  const r = data as unknown as Record<string, unknown>;
+  const arr = (k: string) => (r[k] ?? []) as Record<string, unknown>[];
+  return {
+    sales: arr('sales').map((x) => ({
+      orderId: String(x.order_id),
+      orderNumber: String(x.order_number ?? ''),
+      date: String(x.date),
+      buyer: (x.buyer as string | null) ?? null,
+      status: String(x.status ?? ''),
+      paymentMethod: String(x.payment_method ?? ''),
+      paymentStatus: String(x.payment_status ?? ''),
+      total: num(x.total),
+      commission: num(x.commission),
+    })),
+    returns: arr('returns').map((x) => ({
+      returnId: String(x.return_id),
+      returnNumber: String(x.return_number ?? ''),
+      date: String(x.date),
+      orderNumber: (x.order_number as string | null) ?? null,
+      status: String(x.status ?? ''),
+      refundAmount: num(x.refund_amount),
+      refundedAt: (x.refunded_at as string | null) ?? null,
+    })),
+    wallet: arr('wallet').map((x) => ({
+      id: String(x.id),
+      date: String(x.date),
+      type: String(x.type ?? ''),
+      amount: num(x.amount),
+      balanceAfter: num(x.balance_after),
+      description: (x.description as string | null) ?? null,
+    })),
+  };
 }
 
 export async function fetchSellerStatement(
@@ -122,8 +239,10 @@ export const LEDGER_KIND_LABELS: Record<LedgerEntryKind, string> = {
   commission_refund: 'استرداد عمولة',
   sale_reversal: 'سحب حصيلة مرتجع',
   subscription: 'رسوم اشتراك',
+  // من ٢٥ سبتمبر الفايض بيتنقل لمحفظة البائع تلقائي، والسداد ممكن يكون خصم
+  // من محفظته (ref_type = 'wallet') أو دفع إلكتروني.
   payout: 'تحويل للبائع',
-  settlement: 'تحصيل من البائع',
+  settlement: 'سداد من البائع',
   adjustment: 'تسوية',
   // كان ناقص من القايمة، فالكشف كان بيعرض المفتاح الإنجليزي `refund_payout`
   // وسط تسميات عربية. القيد ده هو قيمة المرتجع اللي رجعت للمشتري — البائع
@@ -194,6 +313,26 @@ export async function issueStatements(periodEnd: string | null = null): Promise<
 export async function waiveStatement(id: string, note: string): Promise<void> {
   const { error } = await supabase.rpc('admin_waive_statement' as never, {
     p_id: id, p_note: note.trim() || null,
+  } as never);
+  if (error) throw new Error(arError(error));
+}
+
+/** قاعدة الإيقاف التلقائي من صفحة الإعدادات — صفر = الشرط مقفول. */
+export async function fetchSuspendRule(): Promise<{ maxDebt: number; afterDays: number }> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['seller_suspend_max_debt', 'seller_suspend_after_days']);
+  if (error) throw new Error(arError(error));
+  const get = (k: string) => num((data ?? []).find((s) => s.key === k)?.value);
+  return { maxDebt: get('seller_suspend_max_debt'), afterDays: get('seller_suspend_after_days') };
+}
+
+/** الأدمن حوّل فلوس البائع من محفظته لحسابه البنكي — بيسجّل الخصم من المحفظة. */
+export async function payoutSellerWallet(companyId: string, amount: string, note: string): Promise<void> {
+  if (!/^\d{1,9}(\.\d{1,3})?$/.test(amount.trim())) throw new Error('اكتب مبلغًا صالحًا');
+  const { error } = await supabase.rpc('admin_seller_wallet_payout' as never, {
+    p_company: companyId, p_amount: amount.trim(), p_note: note.trim() || null,
   } as never);
   if (error) throw new Error(arError(error));
 }

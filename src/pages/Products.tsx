@@ -15,6 +15,7 @@ import {
 import { uploadProductImage } from '../lib/product-image';
 import { skuFromSourceCode } from '../lib/catalog-sku';
 import { addSimilarCodes, MAX_SIMILAR_CODES } from '../lib/similar-codes';
+import { addKeywords, parseKeywords, serializeKeywords } from '../lib/search-keywords';
 import { PageHeader, Btn, Field, Input, Select, Toggle, StatusChip, Money } from '../components/ui';
 import { DataTable, type Column, PAGE_SIZE } from '../components/DataTable';
 import { ImportProductsModal } from '../components/ImportProductsModal';
@@ -257,6 +258,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
   const [uploading, setUploading] = useState(false);
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [similarCodes, setSimilarCodes] = useState<string[]>(product?.similarCodes ?? []);
+  const [keywords, setKeywords] = useState<string[]>([]);
   const [form, setForm] = useState({
     source_code: product?.sourceCode ?? '',
     name_ar: product?.nameAr ?? '',
@@ -286,7 +288,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('specialty_id, category_id, unit_id, origin_country, images, similar_codes, product_placements (specialty_id, category_id)')
+        .select('specialty_id, category_id, unit_id, origin_country, images, similar_codes, search_keywords, product_placements (specialty_id, category_id)')
         .eq('id', product!.id)
         .single();
       if (error) throw new Error(arError(error));
@@ -302,6 +304,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
         setPlacements(normalizePlacements([primary, ...rest]));
         // أنواع `database.ts` المولّدة لسه ما اتجدّدتش بعد العمود الجديد.
         setSimilarCodes((data as { similar_codes?: string[] | null }).similar_codes ?? []);
+        setKeywords(parseKeywords((data as { search_keywords?: string | null }).search_keywords));
         setForm((f) => ({
           ...f,
           unit_id: data.unit_id ?? '',
@@ -358,6 +361,7 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
         unit_id: form.unit_id,
         images: form.image_url.trim() ? [form.image_url.trim()] : [],
         similar_codes: similarCodes,
+        search_keywords: serializeKeywords(keywords),
       };
       const q = product
         ? supabase.from('products').update(payload).eq('id', product.id).select('id').single()
@@ -434,6 +438,8 @@ function ProductModal({ product, onClose, onDone }: { product: ProductRow | null
 
         <SimilarCodesField value={similarCodes} onChange={setSimilarCodes} />
 
+        <KeywordsField value={keywords} onChange={setKeywords} />
+
         <PlacementsField
           value={placements}
           onChange={setPlacements}
@@ -507,6 +513,59 @@ function SimilarCodesField({ value, onChange }: {
           onBlur={commit}
           placeholder="14"
           className="w-24 border-0 bg-transparent p-0 focus:ring-0"
+        />
+      </div>
+    </Field>
+  );
+}
+
+/**
+ * كلمات بحث مخفية — المشتري بيدوّر بالبلدي («لحام» بدل «ماكينة لحام»)، فالكلمات
+ * دي بتدخل في البحث بس ومش بتظهر في التطبيق. الفاصلة بتفصل، والمسافة لأ.
+ */
+function KeywordsField({ value, onChange }: {
+  value: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const commit = () => {
+    if (!draft.trim()) return;
+    onChange(addKeywords(value, draft));
+    setDraft('');
+  };
+
+  return (
+    <Field
+      label="كلمات البحث"
+      hint="كلمات المشتري ممكن يدوّر بيها بدل الاسم بالظبط (لحام، لحامة…) — بتلاقي المنتج في البحث ومش بتظهر في التطبيق. افصل بينها بفاصلة"
+    >
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-2">
+        {value.map((word) => (
+          <span
+            key={word}
+            className="flex items-center gap-1 rounded-full bg-surface px-2.5 py-1 text-xs text-primary ring-1 ring-line"
+          >
+            {word}
+            <button
+              type="button"
+              onClick={() => onChange(value.filter((one) => one !== word))}
+              title={`إزالة ${word}`}
+              className="text-subtext hover:text-danger"
+            >
+              <X size={12} />
+            </button>
+          </span>
+        ))}
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          // Enter بيحفظ الفورم في المودال، فبنمسكه هنا عشان يضيف الكلمة بس.
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ',' || e.key === '،') { e.preventDefault(); commit(); }
+          }}
+          onBlur={commit}
+          placeholder="لحام"
+          className="min-w-32 flex-1 border-0 bg-transparent p-0 focus:ring-0"
         />
       </div>
     </Field>

@@ -43,6 +43,8 @@ export type AccountRow = {
   billingTo: string | null;
   /** الاشتراكات المحصّلة فعليًا خلال الفترة المختارة */
   feesCollected: number;
+  /** عمولة رجعت للبائع بسبب مرتجعات خلال الفترة — صفر للمشتري. */
+  commissionRefunded: number;
 };
 
 export type BillingKind = 'commission' | 'subscription';
@@ -114,6 +116,7 @@ function toRow(r: Record<string, unknown>): AccountRow {
     billingFrom: (r.billing_from as string | null) ?? null,
     billingTo: (r.billing_to as string | null) ?? null,
     feesCollected: num(r.fees_collected),
+    commissionRefunded: num(r.commission_refunded),
   };
 }
 

@@ -20,6 +20,8 @@ export type FinanceSummary = {
   suspended: number;
   money: number;
   commission: number;
+  /** عمولة رجعت للبائعين بسبب المرتجعات في نفس الفترة. */
+  commissionRefunded: number;
   fees: number;
   onSubscription: number;
   onCommission: number;
@@ -41,6 +43,7 @@ export async function fetchFinanceSummary(
     suspended: num(r.suspended),
     money: num(r.money),
     commission: num(r.commission),
+    commissionRefunded: num(r.commission_refunded),
     fees: num(r.fees),
     onSubscription: num(r.on_subscription),
     onCommission: num(r.on_commission),
@@ -167,5 +170,99 @@ export async function fetchFinanceStats(
     ordersCompleted: num(r.orders_completed),
     ordersCancelled: num(r.orders_cancelled),
     ordersReturned: num(r.orders_returned),
+  };
+}
+
+// ------------------------------------------------ تفسير رسوم بائع واحد
+//
+// نفس فلاتر عمود «الرسوم» بالظبط، فـ`net` = الرقم اللي في الجدول. الاسترداد
+// صفوف لوحده (مش جوه الطلب) عشان مرتجع في الفترة على طلب قديم يقفل المجموع.
+
+export type SellerFeePlan = {
+  kind: 'commission' | 'subscription';
+  rate: number | null;
+  fee: number;
+  startsOn: string | null;
+  endsOn: string | null;
+  cycles: number | null;
+  isActive: boolean;
+  createdAt: string;
+  note: string | null;
+};
+
+export type SellerFeeOrder = {
+  orderId: string;
+  orderNumber: string;
+  issuedAt: string | null;
+  paymentMethod: string;
+  grandTotal: number;
+  commission: number;
+};
+
+export type SellerFeesDetail = {
+  commission: number;
+  refunded: number;
+  subscriptions: number;
+  net: number;
+  /** رصيد الحساب الجاري دلوقتي (كل الفترات): موجب = له · سالب = عليه. */
+  balance: number;
+  plans: SellerFeePlan[];
+  orders: SellerFeeOrder[];
+  refunds: { returnId: string | null; returnNumber: string | null; orderId: string | null;
+             orderNumber: string | null; amount: number; at: string }[];
+  subscriptionFees: { amount: number; periodStart: string | null; periodEnd: string | null;
+                      at: string; note: string | null }[];
+};
+
+export async function fetchSellerFeesDetail(
+  companyId: string,
+  from: string | null,
+  to: string | null,
+): Promise<SellerFeesDetail> {
+  const r = await callRpc<Record<string, unknown>>('admin_seller_fees_detail', {
+    p_company: companyId, p_from: from || null, p_to: to || null,
+  });
+  const arr = (k: string) => (r[k] ?? []) as Record<string, unknown>[];
+  const str = (v: unknown) => (v == null ? null : String(v));
+  return {
+    commission: num(r.commission),
+    refunded: num(r.refunded),
+    subscriptions: num(r.subscriptions),
+    net: num(r.net),
+    balance: num(r.balance),
+    plans: arr('plans').map((p) => ({
+      kind: p.kind === 'subscription' ? 'subscription' : 'commission',
+      rate: p.rate == null ? null : num(p.rate),
+      fee: num(p.fee),
+      startsOn: str(p.starts_on),
+      endsOn: str(p.ends_on),
+      cycles: p.cycles == null ? null : num(p.cycles),
+      isActive: p.is_active === true,
+      createdAt: String(p.created_at),
+      note: str(p.note),
+    })),
+    orders: arr('orders').map((o) => ({
+      orderId: String(o.order_id),
+      orderNumber: String(o.order_number ?? ''),
+      issuedAt: str(o.issued_at),
+      paymentMethod: String(o.payment_method ?? ''),
+      grandTotal: num(o.grand_total),
+      commission: num(o.commission),
+    })),
+    refunds: arr('refunds').map((x) => ({
+      returnId: str(x.return_id),
+      returnNumber: str(x.return_number),
+      orderId: str(x.order_id),
+      orderNumber: str(x.order_number),
+      amount: num(x.amount),
+      at: String(x.at),
+    })),
+    subscriptionFees: arr('subscription_fees').map((x) => ({
+      amount: num(x.amount),
+      periodStart: str(x.period_start),
+      periodEnd: str(x.period_end),
+      at: String(x.at),
+      note: str(x.note),
+    })),
   };
 }

@@ -27,6 +27,7 @@ import { BuyerSubscriptionPolicyCard } from '../components/BuyerSubscriptionPoli
 import { SubscriptionCell } from '../components/SubscriptionCell';
 import { fetchSubscribedUntil } from '../api/subscription-policy';
 import { BillingCell } from './accounts/BillingCell';
+import { SellerFeesCell } from './accounts/SellerFeesCell';
 import { statusCell } from './accounts/columns';
 import { fmtDate, fmtDateTime, money } from '../lib/format';
 import { localPhone } from '../lib/format';
@@ -188,27 +189,15 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
         ),
       },
     ]),
-    {
-      // العمود كان بيقرا رسوم الاشتراك بس، فالبائع اللي على نسبة كان بيطلع
-      // **صفر دايمًا** مهما باع. العمولة رقم محسوب على الطلب و**لسه ما اتحصّلش**
-      // فعليًا (مافيش قيد في `platform_fees` ولا خصم من محفظة البائع)، عشان كده
-      // بتتعرض متعلّمة «مستحقة» بدل ما تتحسب محصّلة.
+    // عمود الرسوم للبائع بس: المشتري (فرد أو شركة) مافيش عليه عمولة أصلًا،
+    // فالعمود كان بيطلع «0.000 · عمولة مستحقة» على كل صف ويلخبط الأدمن.
+    ...(isSeller ? [{
+      // صافي اللي المنصة كسبته من البائع: عمولة − المسترد في المرتجعات +
+      // الاشتراك المحصّل. الضغطة بتفتح التفسير (العقود والعمولة طلب طلب).
       key: 'fees',
       header: 'الرسوم',
-      render: (r) => (r.billingKind === 'subscription' ? (
-        <div>
-          <Money value={r.feesCollected} />
-          {r.feesCollected === 0 && (
-            <div className="text-xs text-subtext">لسه ما اتحصّلش</div>
-          )}
-        </div>
-      ) : (
-        <div>
-          <Money value={r.commission} />
-          <div className="text-xs text-danger">عمولة مستحقة</div>
-        </div>
-      )),
-    },
+      render: (r: AccountRow) => <SellerFeesCell key={r.id} row={r} from={range.from} to={range.to} />,
+    }] : []),
     {
       key: 'total',
       header: isSeller ? 'إجمالي المبيعات' : 'إجمالي المشتريات',
@@ -231,7 +220,7 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
           />
         </Card>
       ) : (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className={`mb-4 grid gap-3 sm:grid-cols-2 ${isSeller ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
           <KpiCard
             title={isSeller ? 'إجمالي عدد البائعين' : 'إجمالي عدد الحسابات'}
             value={s ? s.accounts : '…'}
@@ -241,8 +230,11 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
           />
           <KpiCard
             title="إجمالي الرسوم المحصّلة منهم"
-            value={s ? <Money value={s.fees + (isSeller ? s.commission : 0)} /> : '…'}
-            hint={isSeller && s ? `اشتراكات ${money(s.fees)} · عمولة ${money(s.commission)}` : undefined}
+            value={s ? <Money value={s.fees + (isSeller ? s.commission - s.commissionRefunded : 0)} /> : '…'}
+            hint={isSeller && s
+              ? `اشتراكات ${money(s.fees)} · عمولة ${money(s.commission)}`
+                + (s.commissionRefunded > 0 ? ` − مرتجعات ${money(s.commissionRefunded)}` : '')
+              : undefined}
             icon={<CircleDollarSign size={20} />}
             tone="green"
           />
@@ -252,13 +244,16 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
             icon={<ShoppingCart size={20} />}
             tone="orange"
           />
-          <KpiCard
-            title="نظام الرسوم"
-            value={s ? `${s.onSubscription} اشتراك` : '…'}
-            hint={s ? `${s.onCommission} على نسبة` : undefined}
-            icon={<Percent size={20} />}
-            tone="blue"
-          />
+          {/* المشتري مالوش خطة رسوم (نسبة/اشتراك بائع)، فالكارت كان «0 اشتراك · 0 على نسبة» دايمًا */}
+          {isSeller && (
+            <KpiCard
+              title="نظام الرسوم"
+              value={s ? `${s.onSubscription} اشتراك` : '…'}
+              hint={s ? `${s.onCommission} على نسبة` : undefined}
+              icon={<Percent size={20} />}
+              tone="blue"
+            />
+          )}
         </div>
       )}
 
@@ -269,12 +264,15 @@ function AccountsTab({ kind, range }: { kind: AccountKind; range: DateRange }) {
           onChange={(e) => setSearch(e.target.value)}
           className="w-72"
         />
-        <Select value={plan} onChange={(e) => setPlan(e.target.value as typeof plan)} className="w-40">
-          <option value="all">كل أنظمة الرسوم</option>
-          {isSeller && <option value="commission">نسبة من المبيعات</option>}
-          <option value="subscription">اشتراك ثابت</option>
-          <option value="none">بدون خطة</option>
-        </Select>
+        {/* الفلتر بيقرا `billingKind` وده فاضي دايمًا للمشتري، فكان بيفضّي الجدول */}
+        {isSeller && (
+          <Select value={plan} onChange={(e) => setPlan(e.target.value as typeof plan)} className="w-40">
+            <option value="all">كل أنظمة الرسوم</option>
+            <option value="commission">نسبة من المبيعات</option>
+            <option value="subscription">اشتراك ثابت</option>
+            <option value="none">بدون خطة</option>
+          </Select>
+        )}
         <Select
           value={status}
           onChange={(e) => { setStatus(e.target.value as typeof status); setPage(0); }}
