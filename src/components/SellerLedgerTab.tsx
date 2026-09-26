@@ -4,7 +4,7 @@
 //
 // من ٢٥ سبتمبر مفيش بائع «ليه فلوس عند المنصة»: الفايض (حصيلة أونلاين بعد
 // العمولة واللي عليه) بيتنقل لمحفظته تلقائي، وأي مستحق جديد بيتخصم من
-// محفظته تلقائي. فالرصيد هنا يا «عليه» يا «مقفول»، والمحفظة معروضة جنبه.
+// محفظته تلقائي. فالرصيد هنا يا «عليه» يا مفيش، والمحفظة معروضة جنبه.
 // ومفيش «تسجيل حركة» يدوي — التحصيل بيحصل لوحده (خصم من المحفظة) أو
 // بسداد البائع إلكتروني من التطبيق، والإيقاف بالقاعدة اللي في الإعدادات.
 import { useState } from 'react';
@@ -12,7 +12,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Receipt, Wallet, Search, ArrowUpLeft, FileText, ShieldAlert } from 'lucide-react';
 import {
   fetchSellerBalances, fetchSellerStatements, issueStatements, waiveStatement, fetchSuspendRule,
-  payoutSellerWallet,
   type SellerBalance, type SellerStatementRow,
 } from '../api/seller-ledger';
 import { Card, KpiCard, Money, Btn, Field, Input, Textarea, ErrorState, Spinner, StatusChip } from './ui';
@@ -21,9 +20,12 @@ import { SellerStatementModal } from './SellerStatementModal';
 import { useToast } from './Toast';
 import { fmtDate } from '../lib/format';
 
-/** «عليه 12.500 من 3 سبتمبر» / «مقفول». الإشارة بكلمة مش بسالب. */
+/**
+ * «عليه 12.500 من 3 سبتمبر». الإشارة بكلمة مش بسالب. لما مفيش عليه حاجة
+ * الخانة بتفضل فاضية — كان مكتوب «مقفول» والمالك طلب يتشال.
+ */
 function DebtCell({ value, since }: { value: number; since: string | null }) {
-  if (value > -0.0005) return <span className="text-subtext">مقفول</span>;
+  if (value > -0.0005) return null;
   return (
     <span className="text-end">
       <span className="font-medium text-danger">عليه <Money value={-value} /></span>
@@ -33,26 +35,10 @@ function DebtCell({ value, since }: { value: number; since: string | null }) {
 }
 
 export function SellerLedgerTab() {
-  const qc = useQueryClient();
-  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [statementOf, setStatementOf] = useState<SellerBalance | null>(null);
-  // فلوس المحفظة فلوس البائع — الطريق الوحيد تطلع بيه لحد ما طلبات السحب تتعمل
-  const [payoutOf, setPayoutOf] = useState<SellerBalance | null>(null);
-  const [amount, setAmount] = useState('');
-  const [note, setNote] = useState('');
-
-  const payout = useMutation({
-    mutationFn: () => payoutSellerWallet(payoutOf!.id, amount, note),
-    onSuccess: () => {
-      toast('success', 'اتسجّل التحويل');
-      setPayoutOf(null); setAmount(''); setNote('');
-      qc.invalidateQueries({ queryKey: ['seller-balances'] });
-      qc.invalidateQueries({ queryKey: ['seller-general-statement'] });
-      qc.invalidateQueries({ queryKey: ['seller-commission-statement'] });
-    },
-    onError: (e) => toast('error', (e as Error).message),
-  });
+  // زرار «حوّل لحسابه البنكي» (تسجيل صرف المحفظة) اتشال من اللوحة بطلب
+  // المالك لحد إشعار تاني — الدالة `payoutSellerWallet` لسه في الـAPI.
 
   const q = useQuery({
     queryKey: ['seller-balances', search],
@@ -151,15 +137,6 @@ export function SellerLedgerTab() {
                 >
                   كشف حساب <ArrowUpLeft size={12} />
                 </button>
-                {s.wallet > 0 && (
-                  <Btn
-                    variant="ghost"
-                    className="px-2.5 py-1 text-xs"
-                    onClick={() => { setPayoutOf(s); setAmount(s.wallet.toFixed(3)); }}
-                  >
-                    حوّل لحسابه البنكي
-                  </Btn>
-                )}
               </div>
             ))}
           </div>
@@ -172,27 +149,6 @@ export function SellerLedgerTab() {
           name={statementOf.name}
           onClose={() => setStatementOf(null)}
         />
-      )}
-
-      {payoutOf && (
-        <Modal title={`تحويل من محفظة ${payoutOf.name}`} open onClose={() => setPayoutOf(null)}>
-          <p className="mb-3 text-sm text-subtext">
-            في محفظته <Money value={payoutOf.wallet} />. سجّل التحويل بعد ما يطلع من البنك — المبلغ
-            بيتخصم من محفظته والبائع بيوصله إشعار. ده مش قيد على حسابه مع المنصة.
-          </p>
-          <Field label="المبلغ (د.ك)">
-            <Input value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" />
-          </Field>
-          <Field label="ملاحظة (رقم التحويل مثلًا)">
-            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-          </Field>
-          <div className="mt-3 flex gap-2">
-            <Btn onClick={() => payout.mutate()} busy={payout.isPending} disabled={!amount.trim()}>
-              تسجيل التحويل
-            </Btn>
-            <Btn variant="ghost" onClick={() => setPayoutOf(null)}>إلغاء</Btn>
-          </div>
-        </Modal>
       )}
     </div>
   );

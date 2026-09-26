@@ -2,16 +2,16 @@
 // التخصصات الفرعية = جدول categories (parent_id) للحفاظ على توافق الموبايل.
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownAZ, ChevronLeft, FolderOpen, Globe, GripVertical, ImagePlus, Package, Pencil, SeparatorHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDownAZ, ChevronLeft, FolderOpen, Globe, GripVertical, Package, Pencil, SeparatorHorizontal, Trash2, X } from 'lucide-react';
 import { supabase, arError } from '../lib/supabase';
 import { deleteCatalogProduct } from '../lib/catalog-product-delete';
 import { allSelected, pruneSelection, toggleAll, toggleId } from '../lib/bulk-select';
 import { arrangeLevel, moveTo, shownDividers, splitLevelProducts, type ArrangeBy } from '../lib/taxonomy-level';
-import { skuFromSourceCode } from '../lib/catalog-sku';
 import { sellersOffersLabel } from '../lib/labels';
 import { PageHeader, Btn, Field, Input, Select, Toggle, Card, Spinner, EmptyState } from '../components/ui';
 import { ImportProductsModal } from '../components/ImportProductsModal';
 import { ConfirmDialog, Modal } from '../components/Modal';
+import { ProductModal } from '../components/ProductModal';
 import { useToast } from '../components/Toast';
 
 type Tab = 'tree' | 'units';
@@ -95,31 +95,6 @@ async function uploadTaxonomyImage(file: File, folder: string): Promise<string> 
   if (error) throw new Error(arError(error));
   const { data } = supabase.storage.from(TAXONOMY_BUCKET).getPublicUrl(path);
   return data.publicUrl;
-}
-
-/** رفع صورة منتج — product-images أولًا، وإلا taxonomy-images/products */
-async function uploadProductImage(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new Error('الملف يجب أن يكون صورة');
-  if (file.size > 5 * 1024 * 1024) throw new Error('حجم الصورة يجب ألا يتجاوز 5 ميجابايت');
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-  const path = `catalog/${crypto.randomUUID()}.${ext}`;
-  const tryBuckets = [
-    { bucket: 'product-images', path },
-    { bucket: TAXONOMY_BUCKET, path: `products/${crypto.randomUUID()}.${ext}` },
-  ] as const;
-  let lastErr: Error | null = null;
-  for (const t of tryBuckets) {
-    const { error } = await supabase.storage.from(t.bucket).upload(t.path, file, {
-      upsert: false,
-      contentType: file.type,
-    });
-    if (!error) {
-      const { data } = supabase.storage.from(t.bucket).getPublicUrl(t.path);
-      return data.publicUrl;
-    }
-    lastErr = new Error(arError(error));
-  }
-  throw lastErr ?? new Error('فشل رفع الصورة');
 }
 
 export default function Taxonomy() {
@@ -1160,10 +1135,18 @@ function TaxonomyBrowser() {
       )}
 
       {(addingProduct || editingProduct) && specialtyId && (
-        <TaxonomyProductModal
-          specialtyId={specialtyId}
-          categoryId={categoryCrumb?.id ?? null}
-          product={editingProduct}
+        // نفس فورم صفحة «المنتجات» بالظبط (ملاحظة المالك) — أرقام التشابه
+        // وكلمات البحث وأماكن الكتالوج. الإضافة بتبدأ بمكان المستوى المفتوح.
+        <ProductModal
+          product={editingProduct ? {
+            id: editingProduct.id,
+            sku: editingProduct.sku,
+            sourceCode: editingProduct.source_code,
+            nameAr: editingProduct.name_ar,
+            images: editingProduct.images,
+            isActive: editingProduct.is_active,
+          } : null}
+          defaultPlacement={{ specialtyId, categoryId: categoryCrumb?.id ?? null }}
           onImportExcel={!editingProduct ? () => {
             setAddingProduct(false);
             setImportFile(null);
@@ -1707,196 +1690,6 @@ function ConvertLevelModal({
             disabled={mode === 'move' && !branchName.trim()}
           >
             تنفيذ
-          </Btn>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-function TaxonomyProductModal({
-  specialtyId,
-  categoryId,
-  product,
-  onImportExcel,
-  onClose,
-  onDone,
-}: {
-  specialtyId: string;
-  categoryId: string | null;
-  product: ProductRow | null;
-  onImportExcel?: () => void;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { toast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [form, setForm] = useState({
-    source_code: product?.source_code ?? '',
-    name_ar: product?.name_ar ?? '',
-    origin_country: product?.origin_country ?? '',
-    unit_id: product?.unit_id ?? '',
-    image_url: product?.images?.[0] ?? '',
-    is_active: product?.is_active ?? true,
-  });
-  const generatedSku = form.source_code.trim() ? skuFromSourceCode(form.source_code) : '';
-  const displaySku = product?.sku || generatedSku;
-
-  const { data: units } = useQuery({
-    queryKey: ['units'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('units').select('id, name_ar').order('code');
-      if (error) throw new Error(arError(error));
-      return data ?? [];
-    },
-  });
-
-  async function onPickImage(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    setUploading(true);
-    try {
-      const url = await uploadProductImage(file);
-      setForm((f) => ({ ...f, image_url: url }));
-      toast('success', 'تم رفع صورة المنتج');
-    } catch (err) {
-      toast('error', (err as Error).message);
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  const save = useMutation({
-    mutationFn: async () => {
-      if (!form.name_ar.trim()) throw new Error('الاسم مطلوب');
-      if (!product && !form.source_code.trim()) throw new Error('الكود مطلوب');
-      if (!form.unit_id) throw new Error('اختر وحدة القياس');
-      if (!product) {
-        let branchQ = supabase
-          .from('categories')
-          .select('id', { count: 'exact', head: true })
-          .eq('specialty_id', specialtyId);
-        branchQ = categoryId ? branchQ.eq('parent_id', categoryId) : branchQ.is('parent_id', null);
-        const { count, error: countErr } = await branchQ;
-        if (countErr) throw new Error(arError(countErr));
-        if ((count ?? 0) > 0) {
-          throw new Error('لا يمكن إضافة منتج هنا: هذا المستوى يحتوي فروع بالفعل');
-        }
-      }
-      const payload = {
-        sku: product?.sku ?? skuFromSourceCode(form.source_code),
-        source_code: form.source_code.trim() || null,
-        name_ar: form.name_ar.trim(),
-        origin_country: form.origin_country.trim() || null,
-        specialty_id: specialtyId,
-        category_id: categoryId,
-        unit_id: form.unit_id,
-        images: form.image_url.trim() ? [form.image_url.trim()] : [],
-        is_active: form.is_active,
-      };
-      const q = product
-        ? supabase.from('products').update(payload).eq('id', product.id)
-        : supabase.from('products').insert(payload);
-      const { error } = await q;
-      if (error) throw new Error(arError(error));
-    },
-    onSuccess: () => {
-      toast('success', product ? 'تم تحديث المنتج' : 'تمت إضافة المنتج');
-      onDone();
-    },
-    onError: (e) => toast('error', (e as Error).message),
-  });
-
-  return (
-    <Modal title={product ? `تعديل — ${product.name_ar}` : 'إضافة منتج في هذا المستوى'} open onClose={onClose}>
-      <div className="space-y-4">
-        <Field label="صورة المنتج">
-          <div className="flex items-start gap-3">
-            <div className="relative size-24 shrink-0 overflow-hidden rounded-xl bg-surface ring-1 ring-line">
-              {form.image_url ? (
-                <img src={form.image_url} alt="" className="size-full object-cover" />
-              ) : (
-                <div className="grid size-full place-items-center text-subtext">
-                  <ImagePlus size={22} />
-                </div>
-              )}
-              {form.image_url && (
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, image_url: '' })}
-                  className="absolute top-1 start-1 rounded-full bg-primary/80 p-0.5 text-white hover:bg-danger"
-                  title="إزالة الصورة"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-            <div className="space-y-2">
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
-              <Btn variant="ghost" busy={uploading} onClick={() => fileRef.current?.click()}>
-                رفع صورة
-              </Btn>
-              <p className="text-xs text-subtext">PNG / JPG — حتى 5MB</p>
-            </div>
-          </div>
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="الكود" hint="كودك الخاص من الإكسل — لا يظهر في التطبيق">
-            <Input
-              dir="ltr"
-              value={form.source_code}
-              onChange={(e) => setForm({ ...form, source_code: e.target.value })}
-            />
-          </Field>
-          <Field label="SKU" hint="يتولد تلقائيًا — حرف و 6 أرقام، يظهر في التطبيق">
-            <Input dir="ltr" value={displaySku} readOnly className="bg-surface" />
-          </Field>
-        </div>
-        <Field label="الاسم (عربي)">
-          <Input value={form.name_ar} onChange={(e) => setForm({ ...form, name_ar: e.target.value })} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="بلد المنشأ" hint="منشأ المادة في الكتالوج — البائع يقدر يحدد منشأ تاني لعرضه">
-            <Input
-              value={form.origin_country}
-              onChange={(e) => setForm({ ...form, origin_country: e.target.value })}
-              placeholder="مثال: كويتي / صيني"
-            />
-          </Field>
-          <Field label="وحدة القياس">
-            <Select value={form.unit_id} onChange={(e) => setForm({ ...form, unit_id: e.target.value })}>
-              <option value="">اختر…</option>
-              {(units ?? []).map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name_ar}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        {product && (
-          <label className="flex items-center gap-2 text-sm">
-            <Toggle checked={form.is_active} onChange={(v) => setForm({ ...form, is_active: v })} />
-            <span>{form.is_active ? 'نشط' : 'موقوف / مؤرشف'}</span>
-          </label>
-        )}
-        <p className="text-xs text-subtext">
-          سيُربط المنتج بالتخصص{categoryId ? ' والفرع الحالي' : ' (بدون فئة)'}.
-        </p>
-        <div className="flex justify-end gap-2">
-          {onImportExcel && (
-            <Btn variant="ghost" onClick={onImportExcel} className="me-auto">
-              رفع من Excel
-            </Btn>
-          )}
-          <Btn variant="ghost" onClick={onClose} disabled={save.isPending}>
-            إلغاء
-          </Btn>
-          <Btn variant="accent" busy={save.isPending} onClick={() => save.mutate()}>
-            حفظ
           </Btn>
         </div>
       </div>
